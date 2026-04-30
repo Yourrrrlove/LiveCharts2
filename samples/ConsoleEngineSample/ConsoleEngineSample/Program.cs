@@ -11,8 +11,12 @@ using LiveChartsCore.Kernel.Sketches;
 // ----------------------------------------------------------------------------
 // Renders a single CartesianChart series in the terminal. Pick which series
 // kind to render with --line / --column / --row / --scatter / --step /
-// --stackedcolumn / --stackedrow. Pick render mode with --braille / --sixel
-// (default = half-block).
+// --stackedcolumn / --stackedrow / --candlestick / --box. Pick render mode
+// with --braille / --sixel (default = half-block).
+//
+// Data is sampled from EasingFunctions.BounceInOut shifted by a shared offset
+// that advances every tick — produces a clean wave that scrolls across the
+// chart instead of jittering randomly.
 //
 //   * If stdout is a terminal       → live animated chart (Ctrl+C to exit;
 //                                      second Ctrl+C force-kills).
@@ -41,18 +45,23 @@ try
 }
 catch (System.IO.IOException) { cols = 120; rows = 30; }
 
-const int LinePoints = 64;
-const int Bars = 16;
+const int Points = 32;          // line/step
+const int Bars = 16;            // column/row/stacked
 const int ScatterPoints = 24;
+const double PhaseLine = 0;
+const double PhaseBars = 0.15;
+const double PhaseStackedA = 0;
+const double PhaseStackedB = 0.5;
 
-// One observable per "kind" we plot; only the selected kind's data updates each tick.
-var lineData = new ObservableCollection<double>(SineWave(LinePoints, 1.0, 0));
-var barData = new ObservableCollection<double>(RandomMags(Bars, 0.7));
-var scatterData = new ObservableCollection<ObservablePoint>(RandomScatter(ScatterPoints));
-var stack1Data = new ObservableCollection<double>(RandomMags(Bars, 0.5, seed: 11));
-var stack2Data = new ObservableCollection<double>(RandomMags(Bars, 0.5, seed: 22));
-var candleData = new ObservableCollection<FinancialPoint>(RandomCandles(Bars));
-var boxData = new ObservableCollection<BoxValue>(RandomBoxes(Bars));
+var sharedOffset = 0.0;
+
+var lineData = new ObservableCollection<double>(Bounce(Points, PhaseLine, sharedOffset, signed: true));
+var barData = new ObservableCollection<double>(Bounce(Bars, PhaseBars, sharedOffset, signed: true));
+var scatterData = new ObservableCollection<ObservablePoint>(Scatter(ScatterPoints, sharedOffset));
+var stack1Data = new ObservableCollection<double>(Bounce(Bars, PhaseStackedA, sharedOffset, signed: false));
+var stack2Data = new ObservableCollection<double>(Bounce(Bars, PhaseStackedB, sharedOffset, signed: false));
+var candleData = new ObservableCollection<FinancialPoint>(Candles(Bars, sharedOffset));
+var boxData = new ObservableCollection<BoxValue>(Boxes(Bars, sharedOffset));
 
 ISeries[] series = SelectSeries(args);
 
@@ -80,31 +89,31 @@ if (forceSnapshot || (!forceLive && System.Console.IsOutputRedirected))
 using var cts = new CancellationTokenSource();
 System.Console.CancelKeyPress += (_, e) =>
 {
-    if (cts.IsCancellationRequested) return; // second Ctrl+C: let the runtime kill us.
+    if (cts.IsCancellationRequested) return;
     e.Cancel = true;
     cts.Cancel();
 };
 
+// Data driver — bumps the shared offset by a small step every 250ms. The chart's animation
+// system tweens between snapshots so the visual is smooth at the render FPS.
 _ = Task.Run(async () =>
 {
-    var rng = new Random();
     while (!cts.IsCancellationRequested)
     {
-        try { await Task.Delay(1500, cts.Token); }
+        try { await Task.Delay(250, cts.Token); }
         catch (OperationCanceledException) { return; }
+
+        sharedOffset += 0.04;
 
         lock (chart.SyncRoot)
         {
-            for (var i = 0; i < lineData.Count; i++)
-                lineData[i] = Math.Sin(2 * Math.PI * i / 16.0 + rng.NextDouble() * Math.PI * 2);
-            for (var i = 0; i < barData.Count; i++) barData[i] = (rng.NextDouble() - 0.5) * 1.6;
-            for (var i = 0; i < scatterData.Count; i++)
-            {
-                scatterData[i].X = rng.NextDouble() * (LinePoints - 1);
-                scatterData[i].Y = (rng.NextDouble() - 0.5) * 1.8;
-            }
-            for (var i = 0; i < stack1Data.Count; i++) stack1Data[i] = rng.NextDouble() * 0.6;
-            for (var i = 0; i < stack2Data.Count; i++) stack2Data[i] = rng.NextDouble() * 0.6;
+            ApplyBounce(lineData, PhaseLine, sharedOffset, signed: true);
+            ApplyBounce(barData, PhaseBars, sharedOffset, signed: true);
+            ApplyScatter(scatterData, sharedOffset);
+            ApplyBounce(stack1Data, PhaseStackedA, sharedOffset, signed: false);
+            ApplyBounce(stack2Data, PhaseStackedB, sharedOffset, signed: false);
+            ApplyCandles(candleData, sharedOffset);
+            ApplyBoxes(boxData, sharedOffset);
         }
     }
 });
@@ -157,63 +166,102 @@ static string SelectedKind(string[] argv)
     return "line";
 }
 
-static double[] SineWave(int n, double amp, double phase)
+// ----------------------------------------------------------------------------
+// Data shapers — all sample EasingFunctions.BounceInOut at (i / (n-1) + phase
+// + offset), wrapped to [0, 1]. "signed" centers the result around zero.
+// ----------------------------------------------------------------------------
+
+static double[] Bounce(int n, double phase, double offset, bool signed)
 {
     var data = new double[n];
-    for (var i = 0; i < n; i++) data[i] = amp * Math.Sin(2 * Math.PI * i / 16.0 + phase);
+    for (var i = 0; i < n; i++) data[i] = SampleBounce(i, n, phase, offset, signed);
     return data;
 }
 
-static double[] RandomMags(int n, double amp, int seed = 1)
+static void ApplyBounce(IList<double> dst, double phase, double offset, bool signed)
 {
-    var rng = new Random(seed);
-    var data = new double[n];
-    for (var i = 0; i < n; i++) data[i] = (rng.NextDouble() - 0.5) * 2 * amp;
-    return data;
+    for (var i = 0; i < dst.Count; i++) dst[i] = SampleBounce(i, dst.Count, phase, offset, signed);
 }
 
-static ObservablePoint[] RandomScatter(int n)
+static double SampleBounce(int i, int n, double phase, double offset, bool signed)
 {
-    var rng = new Random(2);
+    var x = i / (double)(n - 1) + phase + offset;
+    x = ((x % 1) + 1) % 1; // wrap to [0, 1]
+    var v = EasingFunctions.BounceInOut((float)x);
+    return signed ? v * 2 - 1 : v;
+}
+
+// Scatter — X bounces along one phase, Y along another, so points trace a
+// Lissajous-ish path that breathes with the offset.
+static ObservablePoint[] Scatter(int n, double offset)
+{
     var data = new ObservablePoint[n];
-    for (var i = 0; i < n; i++)
-        data[i] = new ObservablePoint(rng.NextDouble() * (LinePoints - 1), (rng.NextDouble() - 0.5) * 1.6);
+    for (var i = 0; i < n; i++) data[i] = ScatterPoint(i, n, offset);
     return data;
 }
 
-static FinancialPoint[] RandomCandles(int n)
+static void ApplyScatter(IList<ObservablePoint> dst, double offset)
 {
-    var rng = new Random(3);
+    for (var i = 0; i < dst.Count; i++)
+    {
+        var p = ScatterPoint(i, dst.Count, offset);
+        dst[i].X = p.X;
+        dst[i].Y = p.Y;
+    }
+}
+
+static ObservablePoint ScatterPoint(int i, int n, double offset)
+{
+    // Spread X across the line range so it overlays cleanly on the same axis.
+    var x = i / (double)(n - 1) * (Points - 1);
+    var y = SampleBounce(i, n, 0.10 + (i & 1) * 0.20, offset, signed: true);
+    return new ObservablePoint(x, y);
+}
+
+// Candlesticks — bounce drives the close price; high/low expand around it.
+static FinancialPoint[] Candles(int n, double offset)
+{
     var data = new FinancialPoint[n];
-    var price = 100.0;
-    for (var i = 0; i < n; i++)
-    {
-        var open = price;
-        var close = open + (rng.NextDouble() - 0.5) * 6;
-        var high = Math.Max(open, close) + rng.NextDouble() * 3;
-        var low = Math.Min(open, close) - rng.NextDouble() * 3;
-        data[i] = new FinancialPoint(DateTime.Today.AddDays(i), high, open, close, low);
-        price = close;
-    }
+    for (var i = 0; i < n; i++) data[i] = CandlePoint(i, n, offset);
     return data;
 }
 
-static BoxValue[] RandomBoxes(int n)
+static void ApplyCandles(IList<FinancialPoint> dst, double offset)
 {
-    var rng = new Random(4);
-    var data = new BoxValue[n];
-    for (var i = 0; i < n; i++)
+    for (var i = 0; i < dst.Count; i++)
     {
-        var center = 50 + rng.NextDouble() * 30;
-        var spread = 5 + rng.NextDouble() * 10;
-        var max = center + spread + rng.NextDouble() * 4;
-        var q3 = center + spread * 0.5;
-        var median = center;
-        var q1 = center - spread * 0.5;
-        var min = center - spread - rng.NextDouble() * 4;
-        data[i] = new BoxValue(max, q3, q1, median, min);
+        var c = CandlePoint(i, dst.Count, offset);
+        dst[i] = c;
     }
+}
+
+static FinancialPoint CandlePoint(int i, int n, double offset)
+{
+    var close = 100 + SampleBounce(i, n, 0.05, offset, signed: true) * 5;
+    var open = 100 + SampleBounce(i - 1, n, 0.05, offset, signed: true) * 5;
+    var high = Math.Max(open, close) + 1.5 + SampleBounce(i, n, 0.30, offset, signed: false) * 1.5;
+    var low = Math.Min(open, close) - 1.5 - SampleBounce(i, n, 0.40, offset, signed: false) * 1.5;
+    return new FinancialPoint(DateTime.Today.AddDays(i), high, open, close, low);
+}
+
+// Boxes — bounced median + bounce-modulated spread so the boxes breathe in/out.
+static BoxValue[] Boxes(int n, double offset)
+{
+    var data = new BoxValue[n];
+    for (var i = 0; i < n; i++) data[i] = BoxPoint(i, n, offset);
     return data;
+}
+
+static void ApplyBoxes(IList<BoxValue> dst, double offset)
+{
+    for (var i = 0; i < dst.Count; i++) dst[i] = BoxPoint(i, dst.Count, offset);
+}
+
+static BoxValue BoxPoint(int i, int n, double offset)
+{
+    var center = 70 + SampleBounce(i, n, 0.05, offset, signed: true) * 10;
+    var spread = 4 + SampleBounce(i, n, 0.30, offset, signed: false) * 6;
+    return new BoxValue(center + spread + 2, center + spread / 2, center - spread / 2, center, center - spread - 2);
 }
 
 static int? ParseIntFlag(string[] argv, string flag)
