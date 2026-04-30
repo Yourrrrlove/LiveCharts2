@@ -67,9 +67,24 @@ public static class LiveChartsConsole
                     var color = theme.GetSeriesColor(line);
                     line.Stroke = new SolidColorPaint(color, 1f);
                     line.Fill = null;
-                    line.GeometrySize = 0; // hide point geometries (rectangles look ugly here).
+                    line.GeometrySize = 0; // hide default point geometries.
                     line.GeometryStroke = null;
                     line.GeometryFill = null;
+                })
+                .HasRuleForBarSeries(bar =>
+                {
+                    var color = theme.GetSeriesColor(bar);
+                    bar.Stroke = null;
+                    bar.Fill = new SolidColorPaint(color);
+                    bar.Rx = 1;
+                    bar.Ry = 1;
+                })
+                .HasRuleForScatterSeries(scatter =>
+                {
+                    var color = theme.GetSeriesColor(scatter);
+                    scatter.Stroke = null;
+                    scatter.Fill = new SolidColorPaint(color);
+                    scatter.GeometrySize = 8;
                 }));
 }
 
