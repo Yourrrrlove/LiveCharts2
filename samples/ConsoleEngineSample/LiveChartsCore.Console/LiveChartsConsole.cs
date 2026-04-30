@@ -88,6 +88,16 @@ public static class LiveChartsConsole
                     bar.Rx = 1;
                     bar.Ry = 1;
                 })
+                .HasRuleForStackedBarSeries(stacked =>
+                {
+                    // IStackedBarSeries is a sibling of IBarSeries, not a child — without this
+                    // rule stacked column/row series get no Stroke/Fill set and render nothing.
+                    var color = theme.GetSeriesColor(stacked);
+                    stacked.Stroke = null;
+                    stacked.Fill = new SolidColorPaint(color);
+                    stacked.Rx = 0;
+                    stacked.Ry = 0;
+                })
                 .HasRuleForScatterSeries(scatter =>
                 {
                     var color = theme.GetSeriesColor(scatter);

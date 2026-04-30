@@ -213,13 +213,16 @@ public sealed class ConsoleSurface
         var sb = new StringBuilder(Width * Height / 3);
         if (home) _ = sb.Append("\x1b[H");
 
-        // Labels for Sixel mode are rasterized into the pixel grid by LabelGeometry, so this
-        // is a single self-contained DCS block — no cell-text overlay pass needed (which is
-        // what used to flicker between the Sixel write and the text write).
+        // Labels are rasterized into the pixel grid by LabelGeometry, so this is a single
+        // self-contained DCS block — no cell-text overlay pass needed.
         _ = sb.Append(SixelEncoder.Encode(_pixels!, Background));
 
-        // Park the cursor below the chart so any subsequent prompt doesn't land on the image.
-        _ = sb.Append("\x1b[").Append(CellRows + 1).Append(";1H\x1b[0m");
+        // Reset SGR state but DON'T park the cursor with an absolute escape — when the
+        // terminal's real cell pixel height differs from SixelCellHeight, parking past the
+        // image's actual on-screen footprint causes the terminal to scroll, and the scroll
+        // fills the new row with the active SGR attribute (often a stray black). The live
+        // loop's exit path handles cursor restoration; per-frame parking just causes flicker.
+        _ = sb.Append("\x1b[0m");
         return sb.ToString();
     }
 
