@@ -50,5 +50,6 @@ using System.Reflection;
 [assembly: InternalsVisibleTo("LiveChartsCore.SkiaSharpView.Blazor")]
 [assembly: InternalsVisibleTo("LiveChartsCore.SkiaSharpView.Maui")]
 [assembly: InternalsVisibleTo("LiveChartsCore.Vortice")]
+[assembly: InternalsVisibleTo("LiveChartsCore.Console")]
 
 #endif
