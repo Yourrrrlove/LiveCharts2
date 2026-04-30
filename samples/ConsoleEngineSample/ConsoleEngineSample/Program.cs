@@ -98,6 +98,13 @@ if (forceSnapshot || (!forceLive && System.Console.IsOutputRedirected))
 using var cts = new CancellationTokenSource();
 System.Console.CancelKeyPress += (_, e) =>
 {
+    if (cts.IsCancellationRequested)
+    {
+        // Second Ctrl+C: don't suppress — let the runtime kill the process. Belt-and-braces
+        // for the case where the loop is mid-Sixel-encode and graceful cancellation is taking
+        // longer than the user's patience.
+        return;
+    }
     e.Cancel = true;
     cts.Cancel();
 };

@@ -19,7 +19,7 @@ public static class ConsoleTerminal
     /// Modern terminals (Windows Terminal, iTerm2, WezTerm, ghostty, recent VSCode, xterm)
     /// implement this; older or stripped-down terminals don't.
     /// </summary>
-    public static LvcColor? TryDetectBackground(int timeoutMs = 200)
+    public static LvcColor? TryDetectBackground(int timeoutMs = 100)
     {
         if (System.Console.IsInputRedirected || System.Console.IsOutputRedirected)
             return null;
