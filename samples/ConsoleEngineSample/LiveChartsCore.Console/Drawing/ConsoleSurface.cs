@@ -220,32 +220,12 @@ public sealed class ConsoleSurface
         var sb = new StringBuilder(Width * Height / 3);
         if (home) _ = sb.Append("\x1b[H");
 
-        // 1) Sixel image — pixels → DCS block. After this, terminals leave the cursor below
-        //    the image, but absolute cursor positioning lets us punch text labels back into
-        //    the cells the image occupies.
+        // Labels for Sixel mode are rasterized into the pixel grid by LabelGeometry, so this
+        // is a single self-contained DCS block — no cell-text overlay pass needed (which is
+        // what used to flicker between the Sixel write and the text write).
         _ = sb.Append(SixelEncoder.Encode(_pixels!, Background));
 
-        // 2) Glyph overlay — emit each text cell at its absolute terminal position. This ASSUMES
-        //    the Sixel block was emitted from terminal home (1,1), so cell (r,c) → (r+1, c+1).
-        var lastFg = new LvcColor(255, 255, 255);
-        _ = sb.Append(Esc(lastFg, true));
-        _ = sb.Append(Esc(Background, false));
-
-        for (var r = 0; r < CellRows; r++)
-        {
-            for (var c = 0; c < CellCols; c++)
-            {
-                var g = _glyphs[r, c];
-                if (g.Glyph == '\0') continue;
-
-                // 1-based absolute cursor positioning.
-                _ = sb.Append("\x1b[").Append(r + 1).Append(';').Append(c + 1).Append('H');
-                if (!Equal(g.Fg, lastFg)) { _ = sb.Append(Esc(g.Fg, true)); lastFg = g.Fg; }
-                _ = sb.Append(g.Glyph);
-            }
-        }
-
-        // Park the cursor below the chart area so any subsequent prompt doesn't overwrite labels.
+        // Park the cursor below the chart so any subsequent prompt doesn't land on the image.
         _ = sb.Append("\x1b[").Append(CellRows + 1).Append(";1H\x1b[0m");
         return sb.ToString();
     }

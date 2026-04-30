@@ -94,9 +94,15 @@ public abstract class InMemoryConsoleChart
     private void UpdateGlobalCellSize()
     {
         // Read by LabelGeometry.Measure so axis layout reserves the right number of pixels per
-        // character. Single global value matches the "single mode per process" reality of these
-        // in-memory charts; if you need two simultaneously, render them sequentially.
-        var (w, h) = CellPixelSize();
+        // character. For cell-grid modes this is the cell pixel size (1 char = 1 cell). For
+        // Sixel, labels are bitmap-rendered, so this is the bitmap glyph cell instead — it
+        // diverges from the terminal cell pixel size used to size the Sixel image overall.
+        var (w, h) = _mode switch
+        {
+            ConsoleRenderMode.Braille => (2, 4),
+            ConsoleRenderMode.Sixel => (BitmapFont.CellWidth(), BitmapFont.CellHeight()),
+            _ => (1, 2),
+        };
         Drawing.Geometries.LabelGeometry.GlyphPixelsW = w;
         Drawing.Geometries.LabelGeometry.GlyphPixelsH = h;
     }

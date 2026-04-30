@@ -32,8 +32,16 @@ public class LabelGeometry : BaseLabelGeometry, IDrawnElement<ConsoleDrawingCont
             _ => 0f
         };
 
-        context.Surface.DrawText(
-            (int)(X + dx), (int)(Y + dy), Text, context.ActiveColor);
+        var x = (int)(X + dx);
+        var y = (int)(Y + dy);
+
+        // Cell-grid modes emit ANSI text glyphs; Sixel renders labels as bitmap pixels into
+        // the image so they ship with the rest of the frame and don't need a second cell-text
+        // pass (which would flicker between the Sixel write and the overlay write).
+        if (context.Surface.Mode == ConsoleRenderMode.Sixel)
+            BitmapFont.DrawText(context.Surface, x, y, Text, context.ActiveColor);
+        else
+            context.Surface.DrawText(x, y, Text, context.ActiveColor);
     }
 
     public override LvcSize Measure() => MeasuredSize();

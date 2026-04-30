@@ -48,7 +48,7 @@ var chart = new CartesianChart
     RenderMode = mode,
     SixelCellWidth = sixelCw ?? 10,
     SixelCellHeight = sixelCh ?? 22,
-    Background = new(0, 0, 0),
+    Background = new(255, 255, 255),
     Series =
     [
         new LineSeries<double>(data1)
