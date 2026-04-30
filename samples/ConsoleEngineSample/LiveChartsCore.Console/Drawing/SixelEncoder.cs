@@ -14,28 +14,34 @@ namespace LiveChartsCore.Console.Drawing;
 internal static class SixelEncoder
 {
     private const int MaxPalette = 255;
-    // Pn1=0 (default pixel aspect ratio, overridden by raster attributes below), Pn2=2 (unset
-    // pixels are filled with palette color 0 = chart background), Pn3=0 (default grid).
-    private const string DcsIntroducer = "\x1bP0;2;0q";
     private const string DcsTerminator = "\x1b\\";
 
     /// <summary>
     /// Builds the Sixel image. <paramref name="pixels"/> is indexed [y, x] in pixel space.
-    /// Pixels with <c>Color.A == 0</c> are treated as background and rendered using palette
-    /// entry 0, which is set to <paramref name="background"/>.
+    /// Pixels with <c>Color.A == 0</c> are background pixels.
+    /// If <paramref name="background"/>'s alpha is zero, the image is emitted with Pb=1 (unset
+    /// pixels stay transparent — terminal background shows through). Otherwise palette entry 0
+    /// is set to that color and Pb=2 (unset pixels are auto-filled).
     /// </summary>
     public static string Encode(LvcColor[,] pixels, LvcColor background)
     {
         var height = pixels.GetLength(0);
         var width = pixels.GetLength(1);
+        var transparent = background.A == 0;
 
         var sb = new StringBuilder(width * height / 4);
-        _ = sb.Append(DcsIntroducer);
+        // Pn1=0 (aspect default, overridden by raster attrs), Pn2=2 opaque / 1 transparent, Pn3=0.
+        _ = sb.Append(transparent ? "\x1bP0;1;0q" : "\x1bP0;2;0q");
         _ = sb.Append($"\"1;1;{width};{height}");
 
-        // Palette: index 0 always = background. Subsequent indices populated as colors are seen.
-        var palette = new Dictionary<int, int> { [Pack(background)] = 0 };
-        EmitPaletteEntry(sb, 0, background);
+        // Palette: when opaque, index 0 = background and we emit a fill pass for it. When
+        // transparent, no palette entry 0; we never paint background pixels at all.
+        var palette = new Dictionary<int, int>();
+        if (!transparent)
+        {
+            palette[Pack(background)] = 0;
+            EmitPaletteEntry(sb, 0, background);
+        }
 
         for (var y = 0; y < height; y++)
             for (var x = 0; x < width; x++)
@@ -44,7 +50,7 @@ internal static class SixelEncoder
                 if (c.A == 0) continue;
                 var key = Pack(c);
                 if (palette.ContainsKey(key)) continue;
-                if (palette.Count >= MaxPalette) continue; // overflow — pixel falls back to "nearest already in palette" via lookup below
+                if (palette.Count >= MaxPalette) continue; // overflow — falls back to nearest already in palette
                 var idx = palette.Count;
                 palette[key] = idx;
                 EmitPaletteEntry(sb, idx, c);
@@ -55,7 +61,8 @@ internal static class SixelEncoder
         {
             var bandHeight = Math.Min(6, height - bandY);
 
-            // Determine which palette entries are present in this band.
+            // Which palette entries appear in this band? When transparent we skip background,
+            // when opaque we include it (index 0) so the encoder paints a fill pass.
             var colorsInBand = new HashSet<int>();
             for (var y = 0; y < bandHeight; y++)
                 for (var x = 0; x < width; x++)
@@ -63,11 +70,11 @@ internal static class SixelEncoder
                     var c = pixels[bandY + y, x];
                     if (c.A == 0)
                     {
-                        _ = colorsInBand.Add(0); // background pixels render as color 0
+                        if (!transparent) _ = colorsInBand.Add(0);
                         continue;
                     }
                     var key = Pack(c);
-                    _ = colorsInBand.Add(palette.TryGetValue(key, out var idx) ? idx : 0);
+                    if (palette.TryGetValue(key, out var idx)) _ = colorsInBand.Add(idx);
                 }
 
             var first = true;
@@ -75,11 +82,8 @@ internal static class SixelEncoder
             {
                 if (!first) _ = sb.Append('$');
                 first = false;
-
                 _ = sb.Append('#').Append(paletteIdx);
-
-                // Build the 6-row column pattern for this color.
-                EncodeBandColor(sb, pixels, bandY, bandHeight, width, paletteIdx, palette, background);
+                EncodeBandColor(sb, pixels, bandY, bandHeight, width, paletteIdx, palette, transparent);
             }
 
             _ = sb.Append('-');
@@ -97,9 +101,8 @@ internal static class SixelEncoder
         int width,
         int paletteIdx,
         Dictionary<int, int> palette,
-        LvcColor background)
+        bool transparent)
     {
-        var bgKey = Pack(background);
         var runChar = '\0';
         var runLen = 0;
 
@@ -110,9 +113,13 @@ internal static class SixelEncoder
             {
                 var c = pixels[bandY + r, x];
                 int idx;
-                if (c.A == 0) idx = 0;
+                if (c.A == 0)
+                {
+                    if (transparent) continue; // pixel is transparent — never matches any color
+                    idx = 0;
+                }
                 else if (palette.TryGetValue(Pack(c), out var found)) idx = found;
-                else idx = 0; // overflow fallback
+                else continue; // overflow fallback — skip painting
 
                 if (idx == paletteIdx) bits |= 1 << r;
             }

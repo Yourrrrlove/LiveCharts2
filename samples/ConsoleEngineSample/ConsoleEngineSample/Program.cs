@@ -57,7 +57,7 @@ var chart = new CartesianChart
     RenderMode = mode,
     SixelCellWidth = sixelCw ?? 10,
     SixelCellHeight = sixelCh ?? 22,
-    Background = new(255, 255, 255),
+    // Background defaults to auto-detected terminal background; set explicitly to override.
     Series =
     [
         new LineSeries<double>(lineData)

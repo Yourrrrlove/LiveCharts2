@@ -277,7 +277,9 @@ public sealed class ConsoleSurface
     }
 
     private static string Esc(LvcColor c, bool foreground) =>
-        $"\x1b[{(foreground ? 38 : 48)};2;{c.R};{c.G};{c.B}m";
+        c.A == 0
+            ? (foreground ? "\x1b[39m" : "\x1b[49m")  // default fg/bg → terminal shows through
+            : $"\x1b[{(foreground ? 38 : 48)};2;{c.R};{c.G};{c.B}m";
 
     private static bool Equal(LvcColor a, LvcColor b) =>
         a.R == b.R && a.G == b.G && a.B == b.B && a.A == b.A;

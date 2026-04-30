@@ -21,6 +21,9 @@ public abstract class InMemoryConsoleChart
 
     private ConsoleSurface? _surface;
     private ConsoleRenderMode _mode = ConsoleRenderMode.HalfBlock;
+    private LvcColor _background = default; // A=0 → "transparent / not set" sentinel.
+    private bool _backgroundExplicit;
+    private bool _backgroundDetected;
 
     public CoreMotionCanvas CoreCanvas { get; } = new();
 
@@ -34,7 +37,17 @@ public abstract class InMemoryConsoleChart
     /// </summary>
     public int Height { get; set; } = 40;
 
-    public LvcColor Background { get; set; } = new(0, 0, 0);
+    /// <summary>
+    /// Background color. Defaults to "transparent" (A = 0) so the terminal background shows
+    /// through. The chart will try to detect the actual terminal background once on first
+    /// render via OSC 11 and replace this with a solid color when detection succeeds. Set this
+    /// explicitly to opt out of detection.
+    /// </summary>
+    public LvcColor Background
+    {
+        get => _background;
+        set { _background = value; _backgroundExplicit = true; }
+    }
 
     /// <summary>
     /// Lock object that <see cref="Render"/> and <see cref="RenderFrame"/> hold for the duration
@@ -120,6 +133,7 @@ public abstract class InMemoryConsoleChart
 
         lock (SyncRoot)
         {
+            EnsureBackgroundResolved();
             var surface = AcquireSurface();
 
             coreChart.Canvas.DisableAnimations = true;
@@ -146,6 +160,7 @@ public abstract class InMemoryConsoleChart
 
         lock (SyncRoot)
         {
+            EnsureBackgroundResolved();
             var surface = AcquireSurface();
 
             // Idempotent — Load is invoked once in the constructor; this just guards re-entry.
@@ -199,6 +214,23 @@ public abstract class InMemoryConsoleChart
     /// </summary>
     public void Print(bool home = false) =>
         System.Console.Out.Write(Render(home));
+
+    private void EnsureBackgroundResolved()
+    {
+        // If the user set Background explicitly, honor it. Otherwise try ONCE to detect the
+        // terminal's real background via OSC 11. If detection fails, leave it transparent so
+        // the cell encoder emits default-attr escapes and Sixel uses Pb=1 — either way, the
+        // terminal's own background shows through.
+        if (_backgroundExplicit || _backgroundDetected) return;
+        _backgroundDetected = true;
+
+        var detected = ConsoleTerminal.TryDetectBackground();
+        if (detected.HasValue)
+        {
+            var c = detected.Value;
+            _background = new LvcColor(c.R, c.G, c.B); // force opaque so the encoder paints it.
+        }
+    }
 
     private ConsoleSurface AcquireSurface()
     {
