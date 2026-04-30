@@ -21,7 +21,9 @@ LiveCharts.Configure(c => c
     .AddConsoleDefaultTheme()
     .AddDefaultMappers());
 
-var mode = args.Contains("--braille") ? ConsoleRenderMode.Braille : ConsoleRenderMode.HalfBlock;
+var mode = args.Contains("--sixel") ? ConsoleRenderMode.Sixel
+         : args.Contains("--braille") ? ConsoleRenderMode.Braille
+         : ConsoleRenderMode.HalfBlock;
 
 int cols, rows;
 try

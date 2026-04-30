@@ -64,23 +64,39 @@ public abstract class InMemoryConsoleChart
     }
 
     /// <summary>
+    /// Pixels per terminal cell when in <see cref="ConsoleRenderMode.Sixel"/>. The default 8×16
+    /// matches typical monospace cell dimensions reasonably well across terminals; if your terminal
+    /// uses a different cell size, the Sixel image will be rendered slightly smaller or larger
+    /// than the intended cell footprint.
+    /// </summary>
+    public int SixelCellWidth { get; set; } = 8;
+    public int SixelCellHeight { get; set; } = 16;
+
+    /// <summary>
     /// Sizes <see cref="Width"/> and <see cref="Height"/> so the chart fills the given number of
     /// terminal cells under the current <see cref="RenderMode"/>.
     /// </summary>
     public void ConfigureFromTerminalCells(int cellCols, int cellRows)
     {
-        var (cw, ch) = _mode == ConsoleRenderMode.Braille ? (2, 4) : (1, 2);
+        var (cw, ch) = CellPixelSize();
         Width = Math.Max(cw, cellCols * cw);
         Height = Math.Max(ch, cellRows * ch);
         UpdateGlobalCellSize();
     }
 
+    private (int cw, int ch) CellPixelSize() => _mode switch
+    {
+        ConsoleRenderMode.Braille => (2, 4),
+        ConsoleRenderMode.Sixel => (SixelCellWidth, SixelCellHeight),
+        _ => (1, 2),
+    };
+
     private void UpdateGlobalCellSize()
     {
-        // Read by LabelGeometry.Measure so axis layout reserves the right number of sub-pixels
-        // per character. Single global value matches the "single mode per process" reality of
-        // these in-memory charts; if you need two simultaneously, render them sequentially.
-        var (w, h) = _mode == ConsoleRenderMode.Braille ? (2, 4) : (1, 2);
+        // Read by LabelGeometry.Measure so axis layout reserves the right number of pixels per
+        // character. Single global value matches the "single mode per process" reality of these
+        // in-memory charts; if you need two simultaneously, render them sequentially.
+        var (w, h) = CellPixelSize();
         Drawing.Geometries.LabelGeometry.GlyphPixelsW = w;
         Drawing.Geometries.LabelGeometry.GlyphPixelsH = h;
     }
@@ -183,9 +199,10 @@ public abstract class InMemoryConsoleChart
         if (_surface is null
             || _surface.Mode != _mode
             || _surface.Width != Width
-            || _surface.Height != Height)
+            || _surface.Height != Height
+            || (_mode == ConsoleRenderMode.Sixel && (_surface.CellWidth != SixelCellWidth || _surface.CellHeight != SixelCellHeight)))
         {
-            _surface = new ConsoleSurface(Width, Height, _mode);
+            _surface = new ConsoleSurface(Width, Height, _mode, SixelCellWidth, SixelCellHeight);
             UpdateGlobalCellSize();
         }
         _surface.Background = Background;

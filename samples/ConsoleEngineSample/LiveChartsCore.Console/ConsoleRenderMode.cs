@@ -20,4 +20,12 @@ public enum ConsoleRenderMode
     /// per cell (last-write-wins when multiple series cross the same cell).
     /// </summary>
     Braille = 1,
+
+    /// <summary>
+    /// True-pixel raster graphics emitted as a DCS Sixel block, with axis labels overlaid as
+    /// cell-positioned ANSI text. Highest fidelity, but only renders on Sixel-capable terminals
+    /// (Windows Terminal 1.22+, iTerm2, WezTerm, ghostty, modern Konsole, foot, mlterm, recent
+    /// VSCode). On unsupported terminals, the Sixel block is dropped as junk text.
+    /// </summary>
+    Sixel = 2,
 }

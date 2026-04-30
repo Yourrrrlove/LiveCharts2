@@ -6,13 +6,17 @@ using LiveChartsCore.Drawing;
 namespace LiveChartsCore.Console.Drawing;
 
 /// <summary>
-/// A character-grid backbuffer that exposes a sub-pixel coordinate system. The relationship
-/// between sub-pixels and terminal cells depends on <see cref="Mode"/>:
-///   * <see cref="ConsoleRenderMode.HalfBlock"/>: 1 cell = 1 col × 2 rows of pixels (▀ ▄ █),
-///     two colors per cell.
-///   * <see cref="ConsoleRenderMode.Braille"/>: 1 cell = 2 cols × 4 rows of pixel dots,
-///     one color per cell. Quadruples the resolution.
-/// Text labels override the derived block/Braille glyph for whatever cell they land in.
+/// A character-grid backbuffer that exposes a pixel coordinate system. The relationship
+/// between pixels and terminal cells depends on <see cref="Mode"/>:
+///   * <see cref="ConsoleRenderMode.HalfBlock"/>: 1 cell = 1 col × 2 rows of sub-pixels (▀ ▄ █),
+///     two colors per cell. Storage is per-cell.
+///   * <see cref="ConsoleRenderMode.Braille"/>: 1 cell = 2 cols × 4 rows of sub-pixels, encoded
+///     as Braille codepoints. One color per cell. Storage is per-pixel.
+///   * <see cref="ConsoleRenderMode.Sixel"/>: 1 cell ≈ <see cref="CellWidth"/> × <see cref="CellHeight"/>
+///     real pixels (defaults to 8×16). Output is a DCS Sixel block plus cell-positioned text
+///     overlays for axis labels. Storage is per-pixel.
+/// Text labels override the derived block/Braille glyph for whatever cell they land in (or
+/// land on top of the Sixel image as overlay text in Sixel mode).
 /// </summary>
 public sealed class ConsoleSurface
 {
@@ -20,12 +24,6 @@ public sealed class ConsoleSurface
     {
         public LvcColor Top;     // top sub-pixel color, A=0 means transparent.
         public LvcColor Bottom;  // bottom sub-pixel color, A=0 means transparent.
-    }
-
-    private struct BrailleCell
-    {
-        public byte Dots;        // bitmap of the 8 Braille dots — see Set/EncodeBraille.
-        public LvcColor Color;   // last color written to any dot in this cell.
     }
 
     private struct GlyphCell
@@ -36,74 +34,68 @@ public sealed class ConsoleSurface
     }
 
     private readonly HalfBlockCell[,]? _hb;
-    private readonly BrailleCell[,]? _br;
+    private readonly LvcColor[,]? _pixels;
     private readonly GlyphCell[,] _glyphs;
 
     public ConsoleRenderMode Mode { get; }
     public int Width { get; }
     public int Height { get; }
-    public int CellWidth => Mode == ConsoleRenderMode.Braille ? 2 : 1;
-    public int CellHeight => Mode == ConsoleRenderMode.Braille ? 4 : 2;
+    public int CellWidth { get; }
+    public int CellHeight { get; }
     public int CellCols => Width / CellWidth;
     public int CellRows => Height / CellHeight;
 
     /// <summary>
-    /// Background color used when no sub-pixel is set.
+    /// Background color used when no pixel is set.
     /// </summary>
     public LvcColor Background { get; set; } = new(0, 0, 0);
 
-    public ConsoleSurface(int width, int height, ConsoleRenderMode mode = ConsoleRenderMode.HalfBlock)
+    public ConsoleSurface(int width, int height, ConsoleRenderMode mode = ConsoleRenderMode.HalfBlock,
+        int sixelCellWidth = 8, int sixelCellHeight = 16)
     {
         Mode = mode;
-        var cw = mode == ConsoleRenderMode.Braille ? 2 : 1;
-        var ch = mode == ConsoleRenderMode.Braille ? 4 : 2;
+        (CellWidth, CellHeight) = mode switch
+        {
+            ConsoleRenderMode.Braille => (2, 4),
+            ConsoleRenderMode.Sixel => (sixelCellWidth, sixelCellHeight),
+            _ => (1, 2),
+        };
 
-        // Round dimensions down to a multiple of the cell size so we never have a partial cell.
-        Width = Math.Max(cw, (width / cw) * cw);
-        Height = Math.Max(ch, (height / ch) * ch);
+        // Round dimensions down to a multiple of cell size so we never have a partial cell.
+        Width = Math.Max(CellWidth, (width / CellWidth) * CellWidth);
+        Height = Math.Max(CellHeight, (height / CellHeight) * CellHeight);
 
-        if (mode == ConsoleRenderMode.Braille)
-            _br = new BrailleCell[CellRows, CellCols];
-        else
+        if (mode == ConsoleRenderMode.HalfBlock)
             _hb = new HalfBlockCell[CellRows, CellCols];
+        else
+            _pixels = new LvcColor[Height, Width];
 
         _glyphs = new GlyphCell[CellRows, CellCols];
     }
 
     public void Clear()
     {
-        var rows = CellRows;
-        var cols = CellCols;
         if (_hb is not null)
-            for (var r = 0; r < rows; r++)
-                for (var c = 0; c < cols; c++) _hb[r, c] = default;
-        if (_br is not null)
-            for (var r = 0; r < rows; r++)
-                for (var c = 0; c < cols; c++) _br[r, c] = default;
-        for (var r = 0; r < rows; r++)
-            for (var c = 0; c < cols; c++) _glyphs[r, c] = default;
+        {
+            for (var r = 0; r < CellRows; r++)
+                for (var c = 0; c < CellCols; c++) _hb[r, c] = default;
+        }
+        if (_pixels is not null)
+        {
+            for (var y = 0; y < Height; y++)
+                for (var x = 0; x < Width; x++) _pixels[y, x] = default;
+        }
+        for (var r = 0; r < CellRows; r++)
+            for (var c = 0; c < CellCols; c++) _glyphs[r, c] = default;
     }
 
     public void SetPixel(int x, int y, LvcColor color)
     {
         if (x < 0 || y < 0 || x >= Width || y >= Height) return;
 
-        if (_br is not null)
+        if (_pixels is not null)
         {
-            var cellCol = x >> 1;
-            var cellRow = y >> 2;
-            var dx = x & 1;
-            var dy = y & 3;
-            // Braille bit positions:
-            //   left col (dx=0):  rows 0,1,2 → bits 0,1,2 (dots 1,2,3); row 3 → bit 6 (dot 7)
-            //   right col (dx=1): rows 0,1,2 → bits 3,4,5 (dots 4,5,6); row 3 → bit 7 (dot 8)
-            var bit = dx == 0
-                ? (dy < 3 ? dy : 6)
-                : (dy < 3 ? 3 + dy : 7);
-
-            ref var cell = ref _br[cellRow, cellCol];
-            cell.Dots |= (byte)(1 << bit);
-            cell.Color = color;
+            _pixels[y, x] = color;
             return;
         }
 
@@ -167,17 +159,36 @@ public sealed class ConsoleSurface
 
             _glyphs[cellRow, col] = new GlyphCell { Glyph = ch, Fg = fg, Bg = bg };
             // Glyph supersedes any pixels in the same cell.
-            if (_hb is not null) _hb[cellRow, col] = default;
-            if (_br is not null) _br[cellRow, col] = default;
+            if (_hb is not null)
+            {
+                _hb[cellRow, col] = default;
+            }
+            else if (_pixels is not null)
+            {
+                var px0 = col * CellWidth;
+                var py0 = cellRow * CellHeight;
+                for (var py = 0; py < CellHeight; py++)
+                    for (var px = 0; px < CellWidth; px++)
+                        _pixels[py0 + py, px0 + px] = default;
+            }
             col++;
         }
     }
 
     /// <summary>
-    /// Encodes the surface into an ANSI string with 24-bit color escapes. Includes a leading
-    /// cursor-home (\x1b[H) when <paramref name="home"/> is true so successive frames overwrite.
+    /// Encodes the surface into an ANSI string. Includes a leading cursor-home (\x1b[H) when
+    /// <paramref name="home"/> is true so successive frames overwrite in place.
     /// </summary>
     public string ToAnsi(bool home = true)
+    {
+        return Mode switch
+        {
+            ConsoleRenderMode.Sixel => EncodeSixel(home),
+            _ => EncodeCells(home),
+        };
+    }
+
+    private string EncodeCells(bool home)
     {
         var sb = new StringBuilder(CellRows * CellCols * 8);
         if (home) _ = sb.Append("\x1b[H");
@@ -204,6 +215,41 @@ public sealed class ConsoleSurface
         return sb.ToString();
     }
 
+    private string EncodeSixel(bool home)
+    {
+        var sb = new StringBuilder(Width * Height / 3);
+        if (home) _ = sb.Append("\x1b[H");
+
+        // 1) Sixel image — pixels → DCS block. After this, terminals leave the cursor below
+        //    the image, but absolute cursor positioning lets us punch text labels back into
+        //    the cells the image occupies.
+        _ = sb.Append(SixelEncoder.Encode(_pixels!, Background));
+
+        // 2) Glyph overlay — emit each text cell at its absolute terminal position. This ASSUMES
+        //    the Sixel block was emitted from terminal home (1,1), so cell (r,c) → (r+1, c+1).
+        var lastFg = new LvcColor(255, 255, 255);
+        _ = sb.Append(Esc(lastFg, true));
+        _ = sb.Append(Esc(Background, false));
+
+        for (var r = 0; r < CellRows; r++)
+        {
+            for (var c = 0; c < CellCols; c++)
+            {
+                var g = _glyphs[r, c];
+                if (g.Glyph == '\0') continue;
+
+                // 1-based absolute cursor positioning.
+                _ = sb.Append("\x1b[").Append(r + 1).Append(';').Append(c + 1).Append('H');
+                if (!Equal(g.Fg, lastFg)) { _ = sb.Append(Esc(g.Fg, true)); lastFg = g.Fg; }
+                _ = sb.Append(g.Glyph);
+            }
+        }
+
+        // Park the cursor below the chart area so any subsequent prompt doesn't overwrite labels.
+        _ = sb.Append("\x1b[").Append(CellRows + 1).Append(";1H\x1b[0m");
+        return sb.ToString();
+    }
+
     private void ResolveCell(int r, int c, out char glyph, out LvcColor fg, out LvcColor bg)
     {
         var g = _glyphs[r, c];
@@ -215,21 +261,28 @@ public sealed class ConsoleSurface
             return;
         }
 
-        if (_br is not null)
+        if (_pixels is not null)
         {
-            var cell = _br[r, c];
-            if (cell.Dots == 0)
+            // Braille path — sample 2×4 dots from the pixel grid into a Braille codepoint.
+            var bits = 0;
+            LvcColor pickedColor = default;
+            var baseY = r * CellHeight;
+            var baseX = c * CellWidth;
+            for (var dy = 0; dy < CellHeight; dy++)
             {
-                glyph = ' ';
-                fg = Background;
-                bg = Background;
+                for (var dx = 0; dx < CellWidth; dx++)
+                {
+                    var p = _pixels[baseY + dy, baseX + dx];
+                    if (p.A == 0) continue;
+                    var bit = dx == 0
+                        ? (dy < 3 ? dy : 6)
+                        : (dy < 3 ? 3 + dy : 7);
+                    bits |= 1 << bit;
+                    pickedColor = p; // last write wins
+                }
             }
-            else
-            {
-                glyph = (char)(0x2800 | cell.Dots);
-                fg = cell.Color;
-                bg = Background;
-            }
+            if (bits == 0) { glyph = ' '; fg = Background; bg = Background; }
+            else { glyph = (char)(0x2800 | bits); fg = pickedColor; bg = Background; }
             return;
         }
 
