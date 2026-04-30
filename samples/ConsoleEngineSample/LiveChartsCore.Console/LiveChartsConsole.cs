@@ -41,7 +41,9 @@ public static class LiveChartsConsole
                 .HasDefaultLegend(() => new ConsoleNoopLegend())
                 .HasRuleForAxes(axis =>
                 {
-                    axis.TextSize = 2; // 2 sub-pixels = 1 cell row.
+                    // TextSize is informational here — the axis layout reserves space using the
+                    // LabelGeometry size which is driven by the render-mode glyph dimensions.
+                    axis.TextSize = Drawing.Geometries.LabelGeometry.GlyphPixelsH;
                     axis.ShowSeparatorLines = true;
                     axis.LabelsPaint = new SolidColorPaint(new(180, 180, 180));
 

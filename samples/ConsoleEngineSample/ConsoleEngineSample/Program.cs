@@ -21,6 +21,8 @@ LiveCharts.Configure(c => c
     .AddConsoleDefaultTheme()
     .AddDefaultMappers());
 
+var mode = args.Contains("--braille") ? ConsoleRenderMode.Braille : ConsoleRenderMode.HalfBlock;
+
 int cols, rows;
 try
 {
@@ -38,8 +40,7 @@ var data2 = new ObservableCollection<double>(SineWave(64, 0.6, Math.PI / 2));
 
 var chart = new CartesianChart
 {
-    Width = cols,
-    Height = rows * 2,
+    RenderMode = mode,
     Background = new(0, 0, 0),
     Series =
     [
@@ -62,13 +63,16 @@ var chart = new CartesianChart
     ]
 };
 
+chart.ConfigureFromTerminalCells(cols, rows);
+
 var forceLive = args.Contains("--live");
 var forceSnapshot = args.Contains("--snapshot");
 
 if (forceSnapshot || (!forceLive && System.Console.IsOutputRedirected))
 {
     File.WriteAllText("chart.ansi", chart.Render(home: false));
-    System.Console.WriteLine($"Rendered {cols}x{rows*2} sub-pixels ({cols}x{rows} cells) to chart.ansi.");
+    System.Console.WriteLine(
+        $"Rendered {chart.Width}x{chart.Height} sub-pixels ({cols}x{rows} cells, mode={mode}) to chart.ansi.");
     return;
 }
 

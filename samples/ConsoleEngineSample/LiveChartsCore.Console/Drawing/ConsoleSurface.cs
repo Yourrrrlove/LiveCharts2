@@ -6,74 +6,112 @@ using LiveChartsCore.Drawing;
 namespace LiveChartsCore.Console.Drawing;
 
 /// <summary>
-/// A character-grid backbuffer that exposes a "pixel" coordinate system at twice the height of
-/// the underlying terminal cells. Each cell maps to one column of two stacked pixels which the
-/// flush step encodes using upper/lower half-block characters (▀ ▄ █). Text labels override the
-/// derived block glyph for the cell they land in.
+/// A character-grid backbuffer that exposes a sub-pixel coordinate system. The relationship
+/// between sub-pixels and terminal cells depends on <see cref="Mode"/>:
+///   * <see cref="ConsoleRenderMode.HalfBlock"/>: 1 cell = 1 col × 2 rows of pixels (▀ ▄ █),
+///     two colors per cell.
+///   * <see cref="ConsoleRenderMode.Braille"/>: 1 cell = 2 cols × 4 rows of pixel dots,
+///     one color per cell. Quadruples the resolution.
+/// Text labels override the derived block/Braille glyph for whatever cell they land in.
 /// </summary>
 public sealed class ConsoleSurface
 {
-    private struct Cell
+    private struct HalfBlockCell
     {
         public LvcColor Top;     // top sub-pixel color, A=0 means transparent.
         public LvcColor Bottom;  // bottom sub-pixel color, A=0 means transparent.
-        public char Glyph;       // '\0' = no override; otherwise printed as-is.
-        public LvcColor GlyphFg; // foreground for Glyph when set.
-        public LvcColor GlyphBg; // background for Glyph when set; A=0 means inherit.
     }
 
-    private readonly Cell[,] _cells;
+    private struct BrailleCell
+    {
+        public byte Dots;        // bitmap of the 8 Braille dots — see Set/EncodeBraille.
+        public LvcColor Color;   // last color written to any dot in this cell.
+    }
 
-    /// <summary>
-    /// Width in pixels (= number of cell columns).
-    /// </summary>
+    private struct GlyphCell
+    {
+        public char Glyph;       // '\0' = no override.
+        public LvcColor Fg;
+        public LvcColor Bg;      // A=0 means inherit Background.
+    }
+
+    private readonly HalfBlockCell[,]? _hb;
+    private readonly BrailleCell[,]? _br;
+    private readonly GlyphCell[,] _glyphs;
+
+    public ConsoleRenderMode Mode { get; }
     public int Width { get; }
-
-    /// <summary>
-    /// Height in pixels (must be even — = 2 * number of cell rows).
-    /// </summary>
     public int Height { get; }
-
-    public int CellCols => Width;
-    public int CellRows => Height / 2;
+    public int CellWidth => Mode == ConsoleRenderMode.Braille ? 2 : 1;
+    public int CellHeight => Mode == ConsoleRenderMode.Braille ? 4 : 2;
+    public int CellCols => Width / CellWidth;
+    public int CellRows => Height / CellHeight;
 
     /// <summary>
     /// Background color used when no sub-pixel is set.
     /// </summary>
     public LvcColor Background { get; set; } = new(0, 0, 0);
 
-    public ConsoleSurface(int width, int height)
+    public ConsoleSurface(int width, int height, ConsoleRenderMode mode = ConsoleRenderMode.HalfBlock)
     {
-        if (height % 2 != 0) height++;
-        Width = width;
-        Height = height;
-        _cells = new Cell[CellRows, CellCols];
+        Mode = mode;
+        var cw = mode == ConsoleRenderMode.Braille ? 2 : 1;
+        var ch = mode == ConsoleRenderMode.Braille ? 4 : 2;
+
+        // Round dimensions down to a multiple of the cell size so we never have a partial cell.
+        Width = Math.Max(cw, (width / cw) * cw);
+        Height = Math.Max(ch, (height / ch) * ch);
+
+        if (mode == ConsoleRenderMode.Braille)
+            _br = new BrailleCell[CellRows, CellCols];
+        else
+            _hb = new HalfBlockCell[CellRows, CellCols];
+
+        _glyphs = new GlyphCell[CellRows, CellCols];
     }
 
     public void Clear()
     {
         var rows = CellRows;
         var cols = CellCols;
+        if (_hb is not null)
+            for (var r = 0; r < rows; r++)
+                for (var c = 0; c < cols; c++) _hb[r, c] = default;
+        if (_br is not null)
+            for (var r = 0; r < rows; r++)
+                for (var c = 0; c < cols; c++) _br[r, c] = default;
         for (var r = 0; r < rows; r++)
-            for (var c = 0; c < cols; c++)
-                _cells[r, c] = default;
+            for (var c = 0; c < cols; c++) _glyphs[r, c] = default;
     }
 
-    /// <summary>
-    /// Sets a single sub-pixel.
-    /// </summary>
     public void SetPixel(int x, int y, LvcColor color)
     {
         if (x < 0 || y < 0 || x >= Width || y >= Height) return;
 
-        ref var cell = ref _cells[y >> 1, x];
-        if ((y & 1) == 0) cell.Top = color;
-        else cell.Bottom = color;
+        if (_br is not null)
+        {
+            var cellCol = x >> 1;
+            var cellRow = y >> 2;
+            var dx = x & 1;
+            var dy = y & 3;
+            // Braille bit positions:
+            //   left col (dx=0):  rows 0,1,2 → bits 0,1,2 (dots 1,2,3); row 3 → bit 6 (dot 7)
+            //   right col (dx=1): rows 0,1,2 → bits 3,4,5 (dots 4,5,6); row 3 → bit 7 (dot 8)
+            var bit = dx == 0
+                ? (dy < 3 ? dy : 6)
+                : (dy < 3 ? 3 + dy : 7);
+
+            ref var cell = ref _br[cellRow, cellCol];
+            cell.Dots |= (byte)(1 << bit);
+            cell.Color = color;
+            return;
+        }
+
+        ref var hb = ref _hb![y >> 1, x];
+        if ((y & 1) == 0) hb.Top = color;
+        else hb.Bottom = color;
     }
 
-    /// <summary>
-    /// Bresenham line at sub-pixel resolution.
-    /// </summary>
     public void DrawLine(int x0, int y0, int x1, int y1, LvcColor color)
     {
         var dx = Math.Abs(x1 - x0);
@@ -92,9 +130,6 @@ public sealed class ConsoleSurface
         }
     }
 
-    /// <summary>
-    /// Fills a rectangle in sub-pixel coordinates.
-    /// </summary>
     public void FillRect(int x, int y, int w, int h, LvcColor color)
     {
         var x0 = Math.Max(0, x);
@@ -106,9 +141,6 @@ public sealed class ConsoleSurface
                 SetPixel(px, py, color);
     }
 
-    /// <summary>
-    /// Strokes a rectangle outline (one sub-pixel thick).
-    /// </summary>
     public void StrokeRect(int x, int y, int w, int h, LvcColor color)
     {
         if (w <= 0 || h <= 0) return;
@@ -119,34 +151,31 @@ public sealed class ConsoleSurface
     }
 
     /// <summary>
-    /// Writes text into the cell row that contains pixel-y. Each character takes one cell column.
+    /// Writes text into the cell row that contains pixel-y. Each character takes one cell.
     /// </summary>
     public void DrawText(int xPx, int yPx, string text, LvcColor fg, LvcColor bg = default)
     {
         if (string.IsNullOrEmpty(text)) return;
-        var cellRow = yPx >> 1;
+        var cellRow = yPx / CellHeight;
         if (cellRow < 0 || cellRow >= CellRows) return;
 
-        var col = xPx;
+        var col = xPx / CellWidth;
         foreach (var ch in text)
         {
             if (col < 0) { col++; continue; }
             if (col >= CellCols) break;
 
-            ref var cell = ref _cells[cellRow, col];
-            cell.Glyph = ch;
-            cell.GlyphFg = fg;
-            cell.GlyphBg = bg;
-            // Clear any existing block info so the glyph wins cleanly.
-            cell.Top = default;
-            cell.Bottom = default;
+            _glyphs[cellRow, col] = new GlyphCell { Glyph = ch, Fg = fg, Bg = bg };
+            // Glyph supersedes any pixels in the same cell.
+            if (_hb is not null) _hb[cellRow, col] = default;
+            if (_br is not null) _br[cellRow, col] = default;
             col++;
         }
     }
 
     /// <summary>
-    /// Encodes the surface into an ANSI string. Uses 24-bit color escapes.
-    /// Includes a leading cursor-home (\x1b[H) so successive calls overwrite in place.
+    /// Encodes the surface into an ANSI string with 24-bit color escapes. Includes a leading
+    /// cursor-home (\x1b[H) when <paramref name="home"/> is true so successive frames overwrite.
     /// </summary>
     public string ToAnsi(bool home = true)
     {
@@ -162,51 +191,7 @@ public sealed class ConsoleSurface
         {
             for (var c = 0; c < CellCols; c++)
             {
-                var cell = _cells[r, c];
-                char glyph;
-                LvcColor fg, bg;
-
-                if (cell.Glyph != '\0')
-                {
-                    glyph = cell.Glyph;
-                    fg = cell.GlyphFg;
-                    bg = cell.GlyphBg.A == 0 ? Background : cell.GlyphBg;
-                }
-                else
-                {
-                    var hasTop = cell.Top.A != 0;
-                    var hasBot = cell.Bottom.A != 0;
-                    if (!hasTop && !hasBot)
-                    {
-                        glyph = ' ';
-                        fg = Background;
-                        bg = Background;
-                    }
-                    else if (hasTop && !hasBot)
-                    {
-                        glyph = '▀'; // ▀
-                        fg = cell.Top;
-                        bg = Background;
-                    }
-                    else if (!hasTop && hasBot)
-                    {
-                        glyph = '▄'; // ▄
-                        fg = cell.Bottom;
-                        bg = Background;
-                    }
-                    else if (Equal(cell.Top, cell.Bottom))
-                    {
-                        glyph = '█'; // █
-                        fg = cell.Top;
-                        bg = Background;
-                    }
-                    else
-                    {
-                        glyph = '▀'; // ▀ with bg
-                        fg = cell.Top;
-                        bg = cell.Bottom;
-                    }
-                }
+                ResolveCell(r, c, out var glyph, out var fg, out var bg);
 
                 if (!Equal(fg, lastFg)) { _ = sb.Append(Esc(fg, true)); lastFg = fg; }
                 if (!Equal(bg, lastBg)) { _ = sb.Append(Esc(bg, false)); lastBg = bg; }
@@ -215,8 +200,47 @@ public sealed class ConsoleSurface
             if (r < CellRows - 1) _ = sb.Append('\n');
         }
 
-        _ = sb.Append("\x1b[0m"); // reset
+        _ = sb.Append("\x1b[0m");
         return sb.ToString();
+    }
+
+    private void ResolveCell(int r, int c, out char glyph, out LvcColor fg, out LvcColor bg)
+    {
+        var g = _glyphs[r, c];
+        if (g.Glyph != '\0')
+        {
+            glyph = g.Glyph;
+            fg = g.Fg;
+            bg = g.Bg.A == 0 ? Background : g.Bg;
+            return;
+        }
+
+        if (_br is not null)
+        {
+            var cell = _br[r, c];
+            if (cell.Dots == 0)
+            {
+                glyph = ' ';
+                fg = Background;
+                bg = Background;
+            }
+            else
+            {
+                glyph = (char)(0x2800 | cell.Dots);
+                fg = cell.Color;
+                bg = Background;
+            }
+            return;
+        }
+
+        var hb = _hb![r, c];
+        var hasTop = hb.Top.A != 0;
+        var hasBot = hb.Bottom.A != 0;
+        if (!hasTop && !hasBot) { glyph = ' '; fg = Background; bg = Background; }
+        else if (hasTop && !hasBot) { glyph = '▀'; fg = hb.Top; bg = Background; }
+        else if (!hasTop && hasBot) { glyph = '▄'; fg = hb.Bottom; bg = Background; }
+        else if (Equal(hb.Top, hb.Bottom)) { glyph = '█'; fg = hb.Top; bg = Background; }
+        else { glyph = '▀'; fg = hb.Top; bg = hb.Bottom; }
     }
 
     private static string Esc(LvcColor c, bool foreground) =>

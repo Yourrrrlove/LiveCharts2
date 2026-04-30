@@ -20,20 +20,61 @@ public abstract class InMemoryConsoleChart
     }
 
     private ConsoleSurface? _surface;
+    private ConsoleRenderMode _mode = ConsoleRenderMode.HalfBlock;
 
     public CoreMotionCanvas CoreCanvas { get; } = new();
 
     /// <summary>
-    /// Width in sub-pixels (= number of cell columns).
+    /// Width in sub-pixels (= cells × <see cref="ConsoleSurface.CellWidth"/> for the current mode).
     /// </summary>
     public int Width { get; set; } = 120;
 
     /// <summary>
-    /// Height in sub-pixels — must be even. The cell row count is Height / 2.
+    /// Height in sub-pixels (= cells × <see cref="ConsoleSurface.CellHeight"/> for the current mode).
     /// </summary>
     public int Height { get; set; } = 40;
 
     public LvcColor Background { get; set; } = new(0, 0, 0);
+
+    /// <summary>
+    /// Cell encoding for the next render. Set this BEFORE first render. Switching mode in-flight
+    /// is allowed but recreates the surface and resets the cached cell-size that LabelGeometry
+    /// uses for layout — call <see cref="ConfigureFromTerminalCells"/> afterwards if you sized
+    /// the chart by cell count.
+    /// </summary>
+    public ConsoleRenderMode RenderMode
+    {
+        get => _mode;
+        set
+        {
+            if (_mode == value) return;
+            _mode = value;
+            _surface = null;
+            UpdateGlobalCellSize();
+        }
+    }
+
+    /// <summary>
+    /// Sizes <see cref="Width"/> and <see cref="Height"/> so the chart fills the given number of
+    /// terminal cells under the current <see cref="RenderMode"/>.
+    /// </summary>
+    public void ConfigureFromTerminalCells(int cellCols, int cellRows)
+    {
+        var (cw, ch) = _mode == ConsoleRenderMode.Braille ? (2, 4) : (1, 2);
+        Width = Math.Max(cw, cellCols * cw);
+        Height = Math.Max(ch, cellRows * ch);
+        UpdateGlobalCellSize();
+    }
+
+    private void UpdateGlobalCellSize()
+    {
+        // Read by LabelGeometry.Measure so axis layout reserves the right number of sub-pixels
+        // per character. Single global value matches the "single mode per process" reality of
+        // these in-memory charts; if you need two simultaneously, render them sequentially.
+        var (w, h) = _mode == ConsoleRenderMode.Braille ? (2, 4) : (1, 2);
+        Drawing.Geometries.LabelGeometry.GlyphPixelsW = w;
+        Drawing.Geometries.LabelGeometry.GlyphPixelsH = h;
+    }
 
     protected abstract Chart GetCoreChart();
 
@@ -124,8 +165,14 @@ public abstract class InMemoryConsoleChart
 
     private ConsoleSurface AcquireSurface()
     {
-        if (_surface is null || _surface.Width != Width || _surface.Height != Height)
-            _surface = new ConsoleSurface(Width, Height);
+        if (_surface is null
+            || _surface.Mode != _mode
+            || _surface.Width != Width
+            || _surface.Height != Height)
+        {
+            _surface = new ConsoleSurface(Width, Height, _mode);
+            UpdateGlobalCellSize();
+        }
         _surface.Background = Background;
         _surface.Clear();
         return _surface;
@@ -146,11 +193,6 @@ public abstract class InMemoryConsoleChart
             return;
         }
 
-        var newWidth = cols;
-        var newHeight = rows * 2;
-        if (newWidth == Width && newHeight == Height) return;
-
-        Width = newWidth;
-        Height = newHeight;
+        ConfigureFromTerminalCells(cols, rows);
     }
 }
