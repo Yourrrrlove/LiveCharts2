@@ -7,121 +7,133 @@ namespace LiveChartsCore.Console.Drawing;
 
 /// <summary>
 /// Encodes a per-pixel color grid as a DCS Sixel block — a printable-ASCII raster image protocol
-/// understood by Sixel-capable terminals. The output is a self-contained image: cursor lands
-/// below it after rendering. Color quantization is "last unique wins" up to <c>maxPalette</c>;
-/// for chart use the palette is tiny (background + a few series strokes) and never overflows.
+/// understood by Sixel-capable terminals. Output is self-contained: cursor lands below the image.
+/// Hot path optimized for chart-shaped use (small palette, repeated calls): pass-1 walks the
+/// pixel grid once to build the palette and a flat <c>byte[]</c> index buffer; pass-2 iterates
+/// 6-row bands using bool-array color presence and RLE-compresses runs of identical sixels.
 /// </summary>
 internal static class SixelEncoder
 {
     private const int MaxPalette = 255;
-    private const string DcsTerminator = "\x1b\\";
+    private const byte TransparentIndex = 0xFF;
 
-    /// <summary>
-    /// Builds the Sixel image. <paramref name="pixels"/> is indexed [y, x] in pixel space.
-    /// Pixels with <c>Color.A == 0</c> are background pixels.
-    /// If <paramref name="background"/>'s alpha is zero, the image is emitted with Pb=1 (unset
-    /// pixels stay transparent — terminal background shows through). Otherwise palette entry 0
-    /// is set to that color and Pb=2 (unset pixels are auto-filled).
-    /// </summary>
     public static string Encode(LvcColor[,] pixels, LvcColor background)
     {
         var height = pixels.GetLength(0);
         var width = pixels.GetLength(1);
         var transparent = background.A == 0;
 
-        var sb = new StringBuilder(width * height / 4);
-        // Pn1=0 (aspect default, overridden by raster attrs), Pn2=2 opaque / 1 transparent, Pn3=0.
+        var sb = new StringBuilder(width * height / 6);
+        // Pn1=0 (default aspect, raster attrs override), Pn2=2 opaque / 1 transparent, Pn3=0.
         _ = sb.Append(transparent ? "\x1bP0;1;0q" : "\x1bP0;2;0q");
-        _ = sb.Append($"\"1;1;{width};{height}");
+        _ = sb.Append('"').Append("1;1;").Append(width).Append(';').Append(height);
 
-        // Palette: when opaque, index 0 = background and we emit a fill pass for it. When
-        // transparent, no palette entry 0; we never paint background pixels at all.
-        var palette = new Dictionary<int, int>();
+        var palette = new Dictionary<int, byte>(16);
+        var paletteSize = 0;
         if (!transparent)
         {
             palette[Pack(background)] = 0;
             EmitPaletteEntry(sb, 0, background);
+            paletteSize = 1;
         }
 
+        // Pass 1 — convert LvcColor[,] to byte[] of palette indices in row-major order.
+        // This collapses the per-pixel hashtable lookup into a single sweep and gives the
+        // band loop a flat buffer to iterate (much friendlier to the prefetcher than a 2D
+        // array, and lets the JIT elide bounds checks in the inner loop).
+        var indices = new byte[height * width];
         for (var y = 0; y < height; y++)
+        {
+            var rowOff = y * width;
             for (var x = 0; x < width; x++)
             {
                 var c = pixels[y, x];
-                if (c.A == 0) continue;
-                var key = Pack(c);
-                if (palette.ContainsKey(key)) continue;
-                if (palette.Count >= MaxPalette) continue; // overflow — falls back to nearest already in palette
-                var idx = palette.Count;
-                palette[key] = idx;
-                EmitPaletteEntry(sb, idx, c);
+                byte idx;
+                if (c.A == 0)
+                {
+                    idx = transparent ? TransparentIndex : (byte)0;
+                }
+                else
+                {
+                    var key = Pack(c);
+                    if (palette.TryGetValue(key, out var found))
+                    {
+                        idx = found;
+                    }
+                    else if (paletteSize < MaxPalette)
+                    {
+                        idx = (byte)paletteSize;
+                        palette[key] = idx;
+                        EmitPaletteEntry(sb, idx, c);
+                        paletteSize++;
+                    }
+                    else
+                    {
+                        idx = transparent ? TransparentIndex : (byte)0; // overflow → drop
+                    }
+                }
+                indices[rowOff + x] = idx;
             }
+        }
 
-        // Encode bands of 6 pixel rows.
+        // Pass 2 — per band: discover colors with a bool[256] presence array, then emit one
+        // RLE-compressed pass per color.
+        var present = new bool[256];
+        var presentList = new List<byte>(8);
+
         for (var bandY = 0; bandY < height; bandY += 6)
         {
             var bandHeight = Math.Min(6, height - bandY);
 
-            // Which palette entries appear in this band? When transparent we skip background,
-            // when opaque we include it (index 0) so the encoder paints a fill pass.
-            var colorsInBand = new HashSet<int>();
+            for (var i = 0; i < presentList.Count; i++) present[presentList[i]] = false;
+            presentList.Clear();
+
             for (var y = 0; y < bandHeight; y++)
+            {
+                var rowOff = (bandY + y) * width;
                 for (var x = 0; x < width; x++)
                 {
-                    var c = pixels[bandY + y, x];
-                    if (c.A == 0)
-                    {
-                        if (!transparent) _ = colorsInBand.Add(0);
-                        continue;
-                    }
-                    var key = Pack(c);
-                    if (palette.TryGetValue(key, out var idx)) _ = colorsInBand.Add(idx);
+                    var idx = indices[rowOff + x];
+                    if (idx == TransparentIndex) continue;
+                    if (!present[idx]) { present[idx] = true; presentList.Add(idx); }
                 }
+            }
 
             var first = true;
-            foreach (var paletteIdx in colorsInBand)
+            foreach (var paletteIdx in presentList)
             {
                 if (!first) _ = sb.Append('$');
                 first = false;
                 _ = sb.Append('#').Append(paletteIdx);
-                EncodeBandColor(sb, pixels, bandY, bandHeight, width, paletteIdx, palette, transparent);
+                EncodeBandColor(sb, indices, width, bandY, bandHeight, paletteIdx);
             }
 
             _ = sb.Append('-');
         }
 
-        _ = sb.Append(DcsTerminator);
+        _ = sb.Append("\x1b\\");
         return sb.ToString();
     }
 
     private static void EncodeBandColor(
         StringBuilder sb,
-        LvcColor[,] pixels,
+        byte[] indices,
+        int width,
         int bandY,
         int bandHeight,
-        int width,
-        int paletteIdx,
-        Dictionary<int, int> palette,
-        bool transparent)
+        byte paletteIdx)
     {
         var runChar = '\0';
         var runLen = 0;
+        var rowBase = bandY * width;
 
         for (var x = 0; x < width; x++)
         {
             var bits = 0;
+            // Unroll the 6 row checks; bandHeight is at most 6 and almost always exactly 6.
             for (var r = 0; r < bandHeight; r++)
             {
-                var c = pixels[bandY + r, x];
-                int idx;
-                if (c.A == 0)
-                {
-                    if (transparent) continue; // pixel is transparent — never matches any color
-                    idx = 0;
-                }
-                else if (palette.TryGetValue(Pack(c), out var found)) idx = found;
-                else continue; // overflow fallback — skip painting
-
-                if (idx == paletteIdx) bits |= 1 << r;
+                if (indices[rowBase + r * width + x] == paletteIdx) bits |= 1 << r;
             }
 
             var ch = (char)('?' + bits);
@@ -148,10 +160,10 @@ internal static class SixelEncoder
 
     private static void EmitPaletteEntry(StringBuilder sb, int index, LvcColor c)
     {
-        // Pc;Pu;Px;Py;Pz where Pu=2 (RGB), values are 0-100 percent.
-        var r = (int)(c.R / 255.0 * 100 + 0.5);
-        var g = (int)(c.G / 255.0 * 100 + 0.5);
-        var b = (int)(c.B / 255.0 * 100 + 0.5);
+        // Pc;Pu;Px;Py;Pz where Pu=2 (RGB), values 0-100 percent.
+        var r = (c.R * 100 + 127) / 255;
+        var g = (c.G * 100 + 127) / 255;
+        var b = (c.B * 100 + 127) / 255;
         _ = sb.Append('#').Append(index).Append(";2;")
               .Append(r).Append(';').Append(g).Append(';').Append(b);
     }

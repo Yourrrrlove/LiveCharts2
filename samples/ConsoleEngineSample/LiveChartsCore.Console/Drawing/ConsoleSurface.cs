@@ -75,18 +75,11 @@ public sealed class ConsoleSurface
 
     public void Clear()
     {
-        if (_hb is not null)
-        {
-            for (var r = 0; r < CellRows; r++)
-                for (var c = 0; c < CellCols; c++) _hb[r, c] = default;
-        }
-        if (_pixels is not null)
-        {
-            for (var y = 0; y < Height; y++)
-                for (var x = 0; x < Width; x++) _pixels[y, x] = default;
-        }
-        for (var r = 0; r < CellRows; r++)
-            for (var c = 0; c < CellCols; c++) _glyphs[r, c] = default;
+        // Array.Clear hits memset under the hood — much faster than the obvious 2D for-loops
+        // when the surface is large (Sixel mode at 1200×660 is ~800k pixels per frame).
+        if (_hb is not null) Array.Clear(_hb, 0, _hb.Length);
+        if (_pixels is not null) Array.Clear(_pixels, 0, _pixels.Length);
+        Array.Clear(_glyphs, 0, _glyphs.Length);
     }
 
     public void SetPixel(int x, int y, LvcColor color)
