@@ -25,6 +25,9 @@ var mode = args.Contains("--sixel") ? ConsoleRenderMode.Sixel
          : args.Contains("--braille") ? ConsoleRenderMode.Braille
          : ConsoleRenderMode.HalfBlock;
 
+int? sixelCw = ParseIntFlag(args, "--sixel-cw");
+int? sixelCh = ParseIntFlag(args, "--sixel-ch");
+
 int cols, rows;
 try
 {
@@ -43,6 +46,8 @@ var data2 = new ObservableCollection<double>(SineWave(64, 0.6, Math.PI / 2));
 var chart = new CartesianChart
 {
     RenderMode = mode,
+    SixelCellWidth = sixelCw ?? 10,
+    SixelCellHeight = sixelCh ?? 22,
     Background = new(0, 0, 0),
     Series =
     [
@@ -115,4 +120,11 @@ static double[] SineWave(int n, double amp, double phase)
     for (var i = 0; i < n; i++)
         data[i] = amp * Math.Sin(2 * Math.PI * i / 16.0 + phase);
     return data;
+}
+
+static int? ParseIntFlag(string[] argv, string flag)
+{
+    for (var i = 0; i < argv.Length - 1; i++)
+        if (argv[i] == flag && int.TryParse(argv[i + 1], out var v)) return v;
+    return null;
 }

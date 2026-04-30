@@ -64,13 +64,13 @@ public abstract class InMemoryConsoleChart
     }
 
     /// <summary>
-    /// Pixels per terminal cell when in <see cref="ConsoleRenderMode.Sixel"/>. The default 8×16
-    /// matches typical monospace cell dimensions reasonably well across terminals; if your terminal
-    /// uses a different cell size, the Sixel image will be rendered slightly smaller or larger
-    /// than the intended cell footprint.
+    /// Pixels per terminal cell when in <see cref="ConsoleRenderMode.Sixel"/>. Defaults are tuned
+    /// for VSCode's default monospace at default zoom; bump them if your terminal uses a larger
+    /// font (axis labels at the bottom of the chart will land in white space below the image
+    /// when these are too small) or shrink them if labels overlap the chart contents.
     /// </summary>
-    public int SixelCellWidth { get; set; } = 8;
-    public int SixelCellHeight { get; set; } = 16;
+    public int SixelCellWidth { get; set; } = 10;
+    public int SixelCellHeight { get; set; } = 22;
 
     /// <summary>
     /// Sizes <see cref="Width"/> and <see cref="Height"/> so the chart fills the given number of

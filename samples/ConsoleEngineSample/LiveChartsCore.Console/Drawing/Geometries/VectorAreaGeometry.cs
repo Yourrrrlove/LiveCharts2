@@ -10,6 +10,13 @@ namespace LiveChartsCore.Console.Drawing.Geometries;
 /// Stroke-only line through the chart data points. Each cubic segment is sampled into a polyline
 /// and rasterized via Bresenham. Fill (closing-to-pivot area) is intentionally not implemented —
 /// it would need a scanline filler we don't have, and is a poor fit for a single-cell-color grid.
+///
+/// Mirrors SkiaSharp's CubicBezierAreaGeometry semantics: the path's "current point" carries
+/// across segments, the first segment opens with an implicit MoveTo(Xi, Yi), and within each
+/// segment Skia's <c>CubicTo(Xi, Yi, Xm, Ym, Xj, Yj)</c> means (Xi, Yi) is the FIRST control
+/// point and (Xj, Yj) is the endpoint — the start is the previous segment's end. Treating
+/// (Xi, Yi) as the start (which an earlier draft did) collapsed the first control onto the
+/// start and produced curves that hugged each starting point then snapped to the end.
 /// </summary>
 public class VectorAreaGeometry : BaseVectorGeometry, IDrawnElement<ConsoleDrawingContext>
 {
@@ -24,28 +31,59 @@ public class VectorAreaGeometry : BaseVectorGeometry, IDrawnElement<ConsoleDrawi
 
         var color = context.ActiveColor;
 
+        var first = true;
+        float currentX = 0, currentY = 0;
+
         foreach (var segment in Commands)
         {
             segment.IsValid = true;
 
-            if (segment is CubicBezierSegment cubic)
-                StrokeCubic(context, cubic, color);
+            float startX, startY;
+            if (first)
+            {
+                // Implicit MoveTo. The first cubic degenerates to a quadratic-feel curve since
+                // start == control1, matching Skia's behavior on the opening segment.
+                startX = segment.Xi;
+                startY = segment.Yi;
+            }
             else
+            {
+                startX = currentX;
+                startY = currentY;
+            }
+
+            if (segment is CubicBezierSegment cubic)
+            {
+                SampleCubic(
+                    context.Surface,
+                    startX, startY,
+                    cubic.Xi, cubic.Yi,   // control 1
+                    cubic.Xm, cubic.Ym,   // control 2
+                    cubic.Xj, cubic.Yj,   // endpoint
+                    color);
+            }
+            else
+            {
                 context.Surface.DrawLine(
-                    (int)segment.Xi, (int)segment.Yi,
-                    (int)segment.Xj, (int)segment.Yj, color);
+                    (int)startX, (int)startY,
+                    (int)segment.Xj, (int)segment.Yj,
+                    color);
+            }
+
+            currentX = segment.Xj;
+            currentY = segment.Yj;
+            first = false;
         }
     }
 
-    private static void StrokeCubic(ConsoleDrawingContext context, CubicBezierSegment seg, LvcColor color)
+    private static void SampleCubic(
+        ConsoleSurface surface,
+        float x0, float y0,
+        float c1x, float c1y,
+        float c2x, float c2y,
+        float x1, float y1,
+        LvcColor color)
     {
-        // The chart engine uses a Catmull-Rom-derived control point pair (Xi/Yi → Xj/Yj with Xm/Ym
-        // being the second control). Sample the cubic uniformly and stroke the polyline.
-        var x0 = seg.Xi;  var y0 = seg.Yi;
-        var xC = seg.Xi;  var yC = seg.Yi; // first ctrl approximated to start (no field for it)
-        var xM = seg.Xm;  var yM = seg.Ym;
-        var x1 = seg.Xj;  var y1 = seg.Yj;
-
         var prevX = (int)x0;
         var prevY = (int)y0;
 
@@ -58,10 +96,10 @@ public class VectorAreaGeometry : BaseVectorGeometry, IDrawnElement<ConsoleDrawi
             var b2 = 3 * u * t * t;
             var b3 = t * t * t;
 
-            var px = (int)(b0 * x0 + b1 * xC + b2 * xM + b3 * x1);
-            var py = (int)(b0 * y0 + b1 * yC + b2 * yM + b3 * y1);
+            var px = (int)(b0 * x0 + b1 * c1x + b2 * c2x + b3 * x1);
+            var py = (int)(b0 * y0 + b1 * c1y + b2 * c2y + b3 * y1);
 
-            context.Surface.DrawLine(prevX, prevY, px, py, color);
+            surface.DrawLine(prevX, prevY, px, py, color);
             prevX = px;
             prevY = py;
         }
