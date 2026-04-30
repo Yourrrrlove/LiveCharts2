@@ -93,10 +93,15 @@ _ = Task.Run(async () =>
         try { await Task.Delay(1500, cts.Token); }
         catch (OperationCanceledException) { return; }
 
-        for (var i = 0; i < data1.Count; i++)
-            data1[i] = Math.Sin(2 * Math.PI * i / 16.0 + rng.NextDouble() * Math.PI * 2);
-        for (var i = 0; i < data2.Count; i++)
-            data2[i] = 0.7 * Math.Sin(2 * Math.PI * i / 14.0 + rng.NextDouble() * Math.PI * 2);
+        // Mutations from a non-render thread must hold chart.SyncRoot — otherwise the chart's
+        // data factory can blow up mid-Measure with "Collection was modified".
+        lock (chart.SyncRoot)
+        {
+            for (var i = 0; i < data1.Count; i++)
+                data1[i] = Math.Sin(2 * Math.PI * i / 16.0 + rng.NextDouble() * Math.PI * 2);
+            for (var i = 0; i < data2.Count; i++)
+                data2[i] = 0.7 * Math.Sin(2 * Math.PI * i / 14.0 + rng.NextDouble() * Math.PI * 2);
+        }
     }
 });
 

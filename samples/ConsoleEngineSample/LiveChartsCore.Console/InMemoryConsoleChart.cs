@@ -37,6 +37,15 @@ public abstract class InMemoryConsoleChart
     public LvcColor Background { get; set; } = new(0, 0, 0);
 
     /// <summary>
+    /// Lock object that <see cref="Render"/> and <see cref="RenderFrame"/> hold for the duration
+    /// of measurement + draw. Callers mutating chart data from a thread other than the render
+    /// thread (e.g. an <c>ObservableCollection&lt;T&gt;</c> driven by a background task) MUST
+    /// take this lock around their mutations to avoid mid-enumeration exceptions in the chart's
+    /// data factory.
+    /// </summary>
+    public object SyncRoot { get; } = new();
+
+    /// <summary>
     /// Cell encoding for the next render. Set this BEFORE first render. Switching mode in-flight
     /// is allowed but recreates the surface and resets the cached cell-size that LabelGeometry
     /// uses for layout — call <see cref="ConfigureFromTerminalCells"/> afterwards if you sized
@@ -87,18 +96,21 @@ public abstract class InMemoryConsoleChart
         var coreChart = GetCoreChart()
             ?? throw new InvalidOperationException("CoreChart is not available.");
 
-        var surface = AcquireSurface();
+        lock (SyncRoot)
+        {
+            var surface = AcquireSurface();
 
-        coreChart.Canvas.DisableAnimations = true;
-        coreChart.IsLoaded = true;
+            coreChart.Canvas.DisableAnimations = true;
+            coreChart.IsLoaded = true;
 
-        coreChart.Measure();
-        coreChart.Canvas.DrawFrame(new ConsoleDrawingContext(CoreCanvas, surface, Background));
+            coreChart.Measure();
+            coreChart.Canvas.DrawFrame(new ConsoleDrawingContext(CoreCanvas, surface, Background));
 
-        coreChart.Unload();
-        _surface = null; // unload disposes paint state, force a fresh surface next call.
+            coreChart.Unload();
+            _surface = null; // unload disposes paint state, force a fresh surface next call.
 
-        return surface.ToAnsi(home);
+            return surface.ToAnsi(home);
+        }
     }
 
     /// <summary>
@@ -110,15 +122,18 @@ public abstract class InMemoryConsoleChart
         var coreChart = GetCoreChart()
             ?? throw new InvalidOperationException("CoreChart is not available.");
 
-        var surface = AcquireSurface();
+        lock (SyncRoot)
+        {
+            var surface = AcquireSurface();
 
-        // Idempotent — Load is invoked once in the constructor; this just guards re-entry.
-        coreChart.IsLoaded = true;
+            // Idempotent — Load is invoked once in the constructor; this just guards re-entry.
+            coreChart.IsLoaded = true;
 
-        coreChart.Measure();
-        coreChart.Canvas.DrawFrame(new ConsoleDrawingContext(CoreCanvas, surface, Background));
+            coreChart.Measure();
+            coreChart.Canvas.DrawFrame(new ConsoleDrawingContext(CoreCanvas, surface, Background));
 
-        return surface.ToAnsi(home);
+            return surface.ToAnsi(home);
+        }
     }
 
     /// <summary>
