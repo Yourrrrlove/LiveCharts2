@@ -14,7 +14,9 @@ namespace LiveChartsCore.Console.Drawing;
 internal static class SixelEncoder
 {
     private const int MaxPalette = 255;
-    private const string DcsIntroducer = "\x1bP0;1;0q";
+    // Pn1=0 (default pixel aspect ratio, overridden by raster attributes below), Pn2=2 (unset
+    // pixels are filled with palette color 0 = chart background), Pn3=0 (default grid).
+    private const string DcsIntroducer = "\x1bP0;2;0q";
     private const string DcsTerminator = "\x1b\\";
 
     /// <summary>
