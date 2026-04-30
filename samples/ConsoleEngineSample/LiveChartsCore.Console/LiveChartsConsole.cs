@@ -7,6 +7,7 @@ using LiveChartsCore.Kernel.Sketches;
 using LiveChartsCore.Measure;
 using LiveChartsCore.Painting;
 using LiveChartsCore.Themes;
+using LvcEasings = LiveChartsCore.EasingFunctions;
 
 namespace LiveChartsCore.Console;
 
@@ -31,8 +32,8 @@ public static class LiveChartsConsole
             .HasTheme(theme => theme
                 .OnInitialized(() =>
                 {
-                    theme.AnimationsSpeed = TimeSpan.Zero;
-                    theme.EasingFunction = null;
+                    theme.AnimationsSpeed = TimeSpan.FromMilliseconds(500);
+                    theme.EasingFunction = LvcEasings.ExponentialOut;
                     theme.Colors = ColorPalletes.MaterialDesign500;
                     theme.VirtualBackroundColor = new(0, 0, 0);
                 })

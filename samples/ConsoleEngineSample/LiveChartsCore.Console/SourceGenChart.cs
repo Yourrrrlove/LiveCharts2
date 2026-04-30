@@ -13,8 +13,9 @@ public abstract partial class SourceGenChart : InMemoryConsoleChart, IDrawnView
 {
     protected SourceGenChart()
     {
-        EasingFunction = null;
-        AutoUpdateEnabled = false;
+        // Defaults (AutoUpdateEnabled = true, EasingFunction from theme) are kept so live
+        // RenderLoopAsync drives animations naturally. The one-shot Render() opts out by
+        // setting Canvas.DisableAnimations = true at the call site.
 
         InitializeChartControl();
         InitializeObservedProperties();
