@@ -71,6 +71,15 @@ public static class LiveChartsConsole
                     line.GeometryStroke = null;
                     line.GeometryFill = null;
                 })
+                .HasRuleForStepLineSeries(step =>
+                {
+                    var color = theme.GetSeriesColor(step);
+                    step.Stroke = new SolidColorPaint(color, 1f);
+                    step.Fill = null;
+                    step.GeometrySize = 0;
+                    step.GeometryStroke = null;
+                    step.GeometryFill = null;
+                })
                 .HasRuleForBarSeries(bar =>
                 {
                     var color = theme.GetSeriesColor(bar);
@@ -85,6 +94,22 @@ public static class LiveChartsConsole
                     scatter.Stroke = null;
                     scatter.Fill = new SolidColorPaint(color);
                     scatter.GeometrySize = 8;
+                })
+                .HasRuleForFinancialSeries(financial =>
+                {
+                    // Default candle colors don't matter much here — the series toggles UpFill/
+                    // DownFill internally based on (open, close). We just provide them.
+                    var color = theme.GetSeriesColor(financial);
+                    financial.UpFill = new SolidColorPaint(new(120, 220, 120));
+                    financial.UpStroke = new SolidColorPaint(new(120, 220, 120), 1f);
+                    financial.DownFill = new SolidColorPaint(new(220, 120, 120));
+                    financial.DownStroke = new SolidColorPaint(new(220, 120, 120), 1f);
+                })
+                .HasRuleForBoxSeries(box =>
+                {
+                    var color = theme.GetSeriesColor(box);
+                    box.Stroke = new SolidColorPaint(color, 1f);
+                    box.Fill = null;
                 }));
 }
 
