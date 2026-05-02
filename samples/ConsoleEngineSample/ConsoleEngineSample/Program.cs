@@ -11,8 +11,9 @@ using LiveChartsCore.Kernel.Sketches;
 // ----------------------------------------------------------------------------
 // Renders a single CartesianChart series in the terminal. Pick which series
 // kind to render with --line / --column / --row / --scatter / --step /
-// --stackedcolumn / --stackedrow / --candlestick / --box. Pick render mode
-// with --braille / --sixel (default = half-block).
+// --stackedcolumn / --stackedrow / --stackedarea / --stackedsteparea /
+// --candlestick / --box. Pick render mode with --braille / --sixel
+// (default = half-block).
 //
 // Data is sampled from EasingFunctions.BounceInOut shifted by a shared offset
 // that advances every tick — produces a clean wave that scrolls across the
@@ -146,6 +147,14 @@ ISeries[] SelectSeries(string[] argv) => SelectedKind(argv) switch
         new StackedRowSeries<double>(stack1Data) { Name = "A" },
         new StackedRowSeries<double>(stack2Data) { Name = "B" }
     ],
+    "stackedarea" => [
+        new StackedAreaSeries<double>(stack1Data) { Name = "A" },
+        new StackedAreaSeries<double>(stack2Data) { Name = "B" }
+    ],
+    "stackedsteparea" => [
+        new StackedStepAreaSeries<double>(stack1Data) { Name = "A" },
+        new StackedStepAreaSeries<double>(stack2Data) { Name = "B" }
+    ],
     "candlestick" => [
         new CandlestickSeries<FinancialPointI>(candleData) { Name = "OHLC" }
     ],
@@ -165,6 +174,8 @@ static string SelectedKind(string[] argv)
     if (argv.Contains("--step")) return "step";
     if (argv.Contains("--stackedcolumn")) return "stackedcolumn";
     if (argv.Contains("--stackedrow")) return "stackedrow";
+    if (argv.Contains("--stackedarea")) return "stackedarea";
+    if (argv.Contains("--stackedsteparea")) return "stackedsteparea";
     if (argv.Contains("--candlestick")) return "candlestick";
     if (argv.Contains("--box")) return "box";
     return "line";

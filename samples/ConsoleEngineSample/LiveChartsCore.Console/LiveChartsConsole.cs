@@ -80,6 +80,20 @@ public static class LiveChartsConsole
                     step.GeometryStroke = null;
                     step.GeometryFill = null;
                 })
+                .HasRuleForStackedLineSeries(stacked =>
+                {
+                    // The base line rule nulls Fill — for stacked area we want the band visible.
+                    // ILineSeries is a sibling of IStackedLineSeries (per the SeriesProperties
+                    // bitmask check in Theme.cs), so this rule fires after HasRuleForLineSeries
+                    // and overwrites just the Fill assignment.
+                    var color = theme.GetSeriesColor(stacked);
+                    stacked.Fill = new SolidColorPaint(color);
+                })
+                .HasRuleForStackedStepLineSeries(stacked =>
+                {
+                    var color = theme.GetSeriesColor(stacked);
+                    stacked.Fill = new SolidColorPaint(color);
+                })
                 .HasRuleForBarSeries(bar =>
                 {
                     var color = theme.GetSeriesColor(bar);
