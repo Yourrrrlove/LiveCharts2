@@ -17,7 +17,7 @@ public class ConsoleProvider : ChartEngine
 
     public override ICartesianAxis GetDefaultCartesianAxis() => new Axis();
 
-    public override IPolarAxis GetDefaultPolarAxis() => throw new NotImplementedException();
+    public override IPolarAxis GetDefaultPolarAxis() => new PolarAxis();
 
     public override Paint GetSolidColorPaint(LvcColor color) => new SolidColorPaint(color);
 

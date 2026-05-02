@@ -140,6 +140,15 @@ public static class LiveChartsConsole
                     var color = theme.GetSeriesColor(pie);
                     pie.Stroke = null;
                     pie.Fill = new SolidColorPaint(color);
+                })
+                .HasRuleForPolarLineSeries(polar =>
+                {
+                    var color = theme.GetSeriesColor(polar);
+                    polar.Stroke = new SolidColorPaint(color, 1f);
+                    polar.Fill = null;
+                    polar.GeometrySize = 0;
+                    polar.GeometryStroke = null;
+                    polar.GeometryFill = null;
                 }));
 }
 

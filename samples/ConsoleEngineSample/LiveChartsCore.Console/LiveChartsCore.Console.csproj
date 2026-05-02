@@ -32,6 +32,13 @@
     <Compile Update="SourceGenPieChart.*.cs">
       <DependentUpon>PieChart.cs</DependentUpon>
     </Compile>
+    <Compile Include="..\..\..\src\skiasharp\_Shared\SourceGenPolarChart.*.cs">
+      <Link>%(Filename).cs</Link>
+      <DependentUpon>PolarChart.cs</DependentUpon>
+    </Compile>
+    <Compile Update="SourceGenPolarChart.*.cs">
+      <DependentUpon>PolarChart.cs</DependentUpon>
+    </Compile>
   </ItemGroup>
 
 </Project>

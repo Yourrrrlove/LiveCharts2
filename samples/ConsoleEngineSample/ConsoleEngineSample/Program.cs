@@ -12,8 +12,9 @@ using LiveChartsCore.Kernel.Sketches;
 // Renders a single chart in the terminal. Pick which series kind to render
 // with --line / --column / --row / --scatter / --step / --stackedcolumn /
 // --stackedrow / --stackedarea / --stackedsteparea / --candlestick / --box /
-// --heat / --pie. Pick render mode with --braille / --sixel (default =
-// half-block). All cartesian kinds use a CartesianChart; --pie uses a PieChart.
+// --heat / --pie / --polar. Pick render mode with --braille / --sixel
+// (default = half-block). Cartesian kinds use a CartesianChart; --pie uses
+// a PieChart; --polar uses a PolarChart.
 //
 // Data is sampled from EasingFunctions.BounceInOut shifted by a shared offset
 // that advances every tick — produces a clean wave that scrolls across the
@@ -72,22 +73,31 @@ for (var i = 0; i < PieSlices; i++) pieData[i] = new ObservableValue(SamplePieVa
 
 var kind = SelectedKind(args);
 
-// PieChart and CartesianChart share the same InMemoryConsoleChart base — they expose the
-// same RenderMode / SixelCellWidth / Render / RenderLoop surface — so we keep the rest of
-// the program polymorphic against that base after this branch.
-InMemoryConsoleChart chart = kind == "pie"
-    ? new PieChart
+// PieChart, PolarChart, and CartesianChart all share the same InMemoryConsoleChart base —
+// they expose the same RenderMode / SixelCellWidth / Render / RenderLoop surface — so we
+// keep the rest of the program polymorphic against that base after this branch.
+InMemoryConsoleChart chart = kind switch
+{
+    "pie" => new PieChart
     {
         RenderMode = mode,
         Series = pieData
             .Select((pv, i) => (ISeries)new PieSeries<ObservableValue>(pv) { Name = $"S{i}" })
             .ToArray(),
-    }
-    : new CartesianChart
+    },
+    "polar" => new PolarChart
+    {
+        RenderMode = mode,
+        Series = [
+            new PolarLineSeries<double>(lineData) { Name = "Signal", GeometrySize = 0, LineSmoothness = 0.65 }
+        ],
+    },
+    _ => new CartesianChart
     {
         RenderMode = mode,
         Series = SelectSeries(args),
-    };
+    },
+};
 
 // Only set SixelCellWidth/Height when the user provided a CLI flag — otherwise leave them
 // alone so the chart can auto-detect the terminal's real cell pixel size at first render.
@@ -202,6 +212,7 @@ static string SelectedKind(string[] argv)
     if (argv.Contains("--box")) return "box";
     if (argv.Contains("--heat")) return "heat";
     if (argv.Contains("--pie")) return "pie";
+    if (argv.Contains("--polar")) return "polar";
     return "line";
 }
 
