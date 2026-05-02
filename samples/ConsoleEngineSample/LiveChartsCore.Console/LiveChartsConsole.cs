@@ -112,6 +112,11 @@ public static class LiveChartsConsole
                     bar.Fill = new SolidColorPaint(color);
                     bar.Rx = 1;
                     bar.Ry = 1;
+                    // Hover dims the individual bar by ~30% — at terminal pixel density a
+                    // scale-up barely reads (a 1.35x scale on a 4-pixel-wide bar still looks
+                    // like a 4-pixel-wide bar after rounding), but opacity blends visibly
+                    // toward the background.
+                    _ = bar.HasState("Hover", [(nameof(DrawnGeometry.Opacity), 0.7f)]);
                 })
                 .HasRuleForStackedBarSeries(stacked =>
                 {
@@ -122,6 +127,7 @@ public static class LiveChartsConsole
                     stacked.Fill = new SolidColorPaint(color);
                     stacked.Rx = 0;
                     stacked.Ry = 0;
+                    _ = stacked.HasState("Hover", [(nameof(DrawnGeometry.Opacity), 0.7f)]);
                 })
                 .HasRuleForScatterSeries(scatter =>
                 {
@@ -129,6 +135,7 @@ public static class LiveChartsConsole
                     scatter.Stroke = null;
                     scatter.Fill = new SolidColorPaint(color);
                     scatter.GeometrySize = 8;
+                    _ = scatter.HasState("Hover", [(nameof(DrawnGeometry.Opacity), 0.7f)]);
                 })
                 .HasRuleForFinancialSeries(financial =>
                 {
@@ -139,12 +146,14 @@ public static class LiveChartsConsole
                     financial.UpStroke = new SolidColorPaint(new(120, 220, 120), 1f);
                     financial.DownFill = new SolidColorPaint(new(220, 120, 120));
                     financial.DownStroke = new SolidColorPaint(new(220, 120, 120), 1f);
+                    _ = financial.HasState("Hover", [(nameof(DrawnGeometry.Opacity), 0.7f)]);
                 })
                 .HasRuleForBoxSeries(box =>
                 {
                     var color = theme.GetSeriesColor(box);
                     box.Stroke = new SolidColorPaint(color, 1f);
                     box.Fill = null;
+                    _ = box.HasState("Hover", [(nameof(DrawnGeometry.Opacity), 0.7f)]);
                 })
                 .HasRuleForPieSeries(pie =>
                 {
