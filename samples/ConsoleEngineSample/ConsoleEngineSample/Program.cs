@@ -80,7 +80,7 @@ var candleData = new ObservableCollection<FinancialPointI>(Candles(Bars, sharedO
 var boxData = new ObservableCollection<BoxValue>(Boxes(Bars, sharedOffset));
 var heatData = new ObservableCollection<WeightedPoint>(Heat(HeatCols, HeatRows, sharedOffset));
 var pieData = new ObservableValue[PieSlices];
-for (var i = 0; i < PieSlices; i++) pieData[i] = new ObservableValue(SamplePieValue(i, sharedOffset));
+for (var i = 0; i < PieSlices; i++) pieData[i] = new ObservableValue(SamplePieValue(i));
 
 var kind = SelectedKind(args);
 
@@ -210,7 +210,9 @@ _ = Task.Run(async () =>
             ApplyCandles(candleData, sharedOffset);
             ApplyBoxes(boxData, sharedOffset);
             ApplyHeat(heatData, HeatCols, HeatRows, sharedOffset);
-            ApplyPie(pieData, sharedOffset);
+            // Pie data is intentionally static — slice values shouldn't change while you're
+            // hovering over them, otherwise the PushOut hover effect competes with constant
+            // wedge re-layout for visual attention.
         }
     }
 });
@@ -418,20 +420,14 @@ static BoxValue BoxPoint(int i, int n, double offset)
         median: center);
 }
 
-// Pie — slice values are independent slow oscillators around a positive midpoint, so wedge
-// sizes shift but stay roughly proportional. Each slice gets its own ObservableValue and is
-// mutated in place (Value setter triggers INPC; the chart redirects the in-flight tween).
-static void ApplyPie(ObservableValue[] data, double offset)
+// Pie — slice values are static so the hover PushOut effect doesn't compete with constant
+// wedge re-layout for visual attention. The shaper still varies values across slices to
+// produce a recognizable spread.
+static double SamplePieValue(int i)
 {
-    for (var i = 0; i < data.Length; i++) data[i].Value = SamplePieValue(i, offset);
-}
-
-static double SamplePieValue(int i, double offset)
-{
-    var t = offset * 2 * Math.PI;
-    // Floor of 1 keeps every wedge visible; oscillation amplitude of 4 means the relative
-    // share of any one wedge can roughly double or halve as the offset advances.
-    return 1 + (Math.Sin(t * 0.6 + i * 0.8) + 1) * 2;
+    // Floor of 1 keeps every wedge visible; the per-slice phase via i*0.8 gives every
+    // slice a different starting size in the [1, 5] range.
+    return 1 + (Math.Sin(i * 0.8) + 1) * 2;
 }
 
 // Heat — 2D grid of WeightedPoint(x, y, weight). Weight is driven by a 2D scrolling wave so

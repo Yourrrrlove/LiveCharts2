@@ -151,6 +151,14 @@ public static class LiveChartsConsole
                     var color = theme.GetSeriesColor(pie);
                     pie.Stroke = null;
                     pie.Fill = new SolidColorPaint(color);
+
+                    // Default HoverPushout is 20 — too much for terminal-pixel densities
+                    // where 8 already reads as a clear separation from the rest of the pie.
+                    pie.HoverPushout = 8;
+                    _ = pie.HasState("Hover", [
+                        (nameof(BaseDoughnutGeometry.PushOut), (float)pie.HoverPushout),
+                        (nameof(DrawnGeometry.Opacity), 0.8f),
+                    ]);
                 })
                 .HasRuleForPolarLineSeries(polar =>
                 {
