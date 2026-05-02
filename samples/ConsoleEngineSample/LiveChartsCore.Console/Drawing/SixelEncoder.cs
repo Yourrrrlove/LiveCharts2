@@ -15,27 +15,33 @@ namespace LiveChartsCore.Console.Drawing;
 internal static class SixelEncoder
 {
     private const int MaxPalette = 255;
-    private const byte TransparentIndex = 0xFF;
 
     public static string Encode(LvcColor[,] pixels, LvcColor background)
     {
+        // Always emit opaque Sixel (Pb=2). With Pb=1 (transparent), the terminal preserves
+        // the previous frame's pixels wherever the new frame is unpainted — that's the
+        // "ghost tooltip" effect: a moving overlay leaves trails behind because its old
+        // pixels never get overwritten. With Pb=2, palette[0] (background) gets stamped
+        // onto every unpainted pixel and the previous frame is fully replaced. If the
+        // caller passes a transparent background (OSC 11 detection failed and nothing
+        // explicit was set) we promote it to a sensible dark fallback so palette[0] is
+        // always defined.
+        if (background.A == 0) background = new LvcColor(20, 20, 20);
+
         var height = pixels.GetLength(0);
         var width = pixels.GetLength(1);
-        var transparent = background.A == 0;
 
         var sb = new StringBuilder(width * height / 6);
-        // Pn1=0 (default aspect, raster attrs override), Pn2=2 opaque / 1 transparent, Pn3=0.
-        _ = sb.Append(transparent ? "\x1bP0;1;0q" : "\x1bP0;2;0q");
+        // Pn1=0 (default aspect, raster attrs override), Pn2=2 opaque, Pn3=0.
+        _ = sb.Append("\x1bP0;2;0q");
         _ = sb.Append('"').Append("1;1;").Append(width).Append(';').Append(height);
 
-        var palette = new Dictionary<int, byte>(16);
-        var paletteSize = 0;
-        if (!transparent)
+        var palette = new Dictionary<int, byte>(16)
         {
-            palette[Pack(background)] = 0;
-            EmitPaletteEntry(sb, 0, background);
-            paletteSize = 1;
-        }
+            [Pack(background)] = 0,
+        };
+        EmitPaletteEntry(sb, 0, background);
+        var paletteSize = 1;
 
         // Pass 1 — convert LvcColor[,] to byte[] of palette indices in row-major order.
         // This collapses the per-pixel hashtable lookup into a single sweep and gives the
@@ -51,7 +57,7 @@ internal static class SixelEncoder
                 byte idx;
                 if (c.A == 0)
                 {
-                    idx = transparent ? TransparentIndex : (byte)0;
+                    idx = 0; // unpainted → palette[0] = background
                 }
                 else
                 {
@@ -69,7 +75,7 @@ internal static class SixelEncoder
                     }
                     else
                     {
-                        idx = transparent ? TransparentIndex : (byte)0; // overflow → drop
+                        idx = 0; // palette overflow → drop to background
                     }
                 }
                 indices[rowOff + x] = idx;
@@ -94,7 +100,6 @@ internal static class SixelEncoder
                 for (var x = 0; x < width; x++)
                 {
                     var idx = indices[rowOff + x];
-                    if (idx == TransparentIndex) continue;
                     if (!present[idx]) { present[idx] = true; presentList.Add(idx); }
                 }
             }

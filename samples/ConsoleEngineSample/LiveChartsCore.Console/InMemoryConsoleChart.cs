@@ -2,6 +2,8 @@
 
 using LiveChartsCore.Console.Drawing;
 using LiveChartsCore.Drawing;
+using LiveChartsCore.Kernel.Sketches;
+using LiveChartsCore.Measure;
 using LiveChartsCore.Motion;
 
 namespace LiveChartsCore.Console;
@@ -214,6 +216,40 @@ public abstract class InMemoryConsoleChart
         // background — if PowerShell's prompt or any prior output left a non-default bg
         // selected, the cleared screen would inherit it. Reset SGR first so the clear
         // uses the terminal's actual default background.
+        // Run the terminal-query auto-detections up-front, while stdin is still in cooked
+        // mode and nobody's reading raw bytes. ConsoleMouse below will switch stdin into
+        // a continuously-read raw-byte loop that would swallow OSC 11 / CSI 16t responses
+        // before our helpers can pick them up.
+        EnsureTerminalDetections();
+
+        // Mouse capture: hover drives tooltips, click-and-drag drives pan, wheel zooms in/out
+        // around the cursor. The engine handles pan internally — once a Press fires it sets
+        // _isPanning, then subsequent Move events go to the panning throttler instead of the
+        // tooltip throttler. Release clears the flag and Move resumes feeding hover.
+        var mouse = new ConsoleMouse((col, row, action) =>
+        {
+            NoteMouseInput();
+            switch (action)
+            {
+                case MouseAction.Move:
+                    SimulatePointerMoveOrLeaveAtCell(col, row);
+                    break;
+                case MouseAction.Press:
+                    SimulatePointerDownAtCell(col, row);
+                    break;
+                case MouseAction.Release:
+                    SimulatePointerUpAtCell(col, row);
+                    break;
+                case MouseAction.WheelUp:
+                    SimulateZoomAtCell(col, row, zoomIn: true);
+                    break;
+                case MouseAction.WheelDown:
+                    SimulateZoomAtCell(col, row, zoomIn: false);
+                    break;
+            }
+        });
+        mouse.Start(output);
+
         await output.WriteAsync("\x1b[0m\x1b[?25l\x1b[2J");
 
         try
@@ -232,6 +268,7 @@ public abstract class InMemoryConsoleChart
         }
         finally
         {
+            mouse.Stop();
             await output.WriteAsync("\x1b[0m\x1b[?25h\n"); // reset color, show cursor.
             await output.FlushAsync(CancellationToken.None);
         }
@@ -258,6 +295,100 @@ public abstract class InMemoryConsoleChart
     }
 
     /// <summary>
+    /// Convenience wrapper around <see cref="SimulatePointerMove"/> that takes terminal
+    /// cell coordinates (0-based) and translates them into surface pixel coordinates using
+    /// the current render mode's per-cell pixel size. ConsoleMouse emits cell coords from
+    /// xterm SGR sequences, so this is the natural target for mouse callbacks.
+    /// </summary>
+    public void SimulatePointerMoveAtCell(int cellCol, int cellRow)
+    {
+        var (cw, ch) = CellPixelSize();
+        SimulatePointerMove(cellCol * cw + cw / 2, cellRow * ch + ch / 2);
+    }
+
+    /// <summary>
+    /// Like <see cref="SimulatePointerMoveAtCell"/>, but if the resulting pixel position
+    /// falls outside the chart's draw margin we fire <see cref="SimulatePointerLeft"/>
+    /// instead. Engines don't fire Tooltip.Hide on their own when the pointer drifts past
+    /// the plot area (they just early-return from DrawToolTip), so without this the
+    /// tooltip would sit there forever once the user mouses out of the chart.
+    /// </summary>
+    public void SimulatePointerMoveOrLeaveAtCell(int cellCol, int cellRow)
+    {
+        var core = GetCoreChart();
+        if (core is null) return;
+
+        var (cw, ch) = CellPixelSize();
+        var xPix = cellCol * cw + cw / 2;
+        var yPix = cellRow * ch + ch / 2;
+
+        var loc = core.DrawMarginLocation;
+        var sz = core.DrawMarginSize;
+        if (xPix < loc.X || xPix > loc.X + sz.Width ||
+            yPix < loc.Y || yPix > loc.Y + sz.Height)
+        {
+            core.InvokePointerLeft();
+        }
+        else
+        {
+            core.InvokePointerMove(new LvcPoint(xPix, yPix));
+        }
+    }
+
+    /// <summary>
+    /// Fires a pointer-down event. The chart engine sets _isPanning so that subsequent
+    /// PointerMove events drive its panning throttler — meaning a click-and-drag becomes
+    /// a chart pan automatically (subject to the chart's <c>ZoomMode</c> flags).
+    /// </summary>
+    public void SimulatePointerDownAtCell(int cellCol, int cellRow)
+    {
+        var core = GetCoreChart();
+        if (core is null) return;
+        var (cw, ch) = CellPixelSize();
+        core.InvokePointerDown(new LvcPoint(cellCol * cw + cw / 2, cellRow * ch + ch / 2), false);
+    }
+
+    /// <summary>
+    /// Fires a pointer-up event. Clears the engine's panning flag, so subsequent
+    /// PointerMove events return to driving hover/tooltip rather than pan.
+    /// </summary>
+    public void SimulatePointerUpAtCell(int cellCol, int cellRow)
+    {
+        var core = GetCoreChart();
+        if (core is null) return;
+        var (cw, ch) = CellPixelSize();
+        core.InvokePointerUp(new LvcPoint(cellCol * cw + cw / 2, cellRow * ch + ch / 2), false);
+    }
+
+    /// <summary>
+    /// Zooms the chart at the given cell (the cell becomes the zoom pivot, so the data
+    /// point under the cursor stays fixed while everything else scales around it). No-op
+    /// for non-cartesian charts since pie / polar don't have a cartesian zoom concept.
+    /// Honors the chart's current <c>ZoomMode</c> flags.
+    /// </summary>
+    public void SimulateZoomAtCell(int cellCol, int cellRow, bool zoomIn)
+    {
+        if (GetCoreChart() is not CartesianChartEngine cartesian) return;
+
+        var (cw, ch) = CellPixelSize();
+        var pivot = new LvcPoint(cellCol * cw + cw / 2, cellRow * ch + ch / 2);
+        var direction = zoomIn ? ZoomDirection.ZoomIn : ZoomDirection.ZoomOut;
+
+        // ZoomMode lives on the view (the chart class), accessed via ICartesianChartView.
+        var mode = ((ICartesianChartView)cartesian.View).ZoomMode;
+        cartesian.Zoom(mode, pivot, direction);
+    }
+
+    /// <summary>
+    /// UTC timestamp of the most recent mouse-driven pointer event (set by the live loop's
+    /// ConsoleMouse callback). Used by the sample's --tooltip auto-scan to back off when
+    /// real mouse input is available, so the two don't race for the tooltip cursor.
+    /// </summary>
+    public DateTime LastMouseInputTimeUtc { get; private set; } = DateTime.MinValue;
+
+    internal void NoteMouseInput() => LastMouseInputTimeUtc = DateTime.UtcNow;
+
+    /// <summary>
     /// Simulates the pointer leaving the chart — fires <c>Tooltip.Hide</c> via the engine.
     /// </summary>
     public void SimulatePointerLeft()
@@ -275,6 +406,22 @@ public abstract class InMemoryConsoleChart
         var core = GetCoreChart();
         if (core?.Tooltip is ConsoleTooltip tooltip)
             tooltip.Render(surface);
+    }
+
+    /// <summary>
+    /// Runs the OSC 11 background and CSI 16t cell-pixel-size queries up-front, while stdin
+    /// is still in cooked mode and not being read by anyone else. Idempotent — both helpers
+    /// short-circuit if already resolved or if the user set a value explicitly.
+    ///
+    /// Important to call this BEFORE starting <see cref="ConsoleMouse"/> (or any other raw
+    /// stdin consumer): the mouse reader runs continuously and would swallow the terminal's
+    /// query responses before our detection helpers could read them, leaving the chart
+    /// stuck on a default (often dark) background that doesn't match the terminal.
+    /// </summary>
+    public void EnsureTerminalDetections()
+    {
+        EnsureBackgroundResolved();
+        EnsureSixelCellSizeResolved();
     }
 
     private void EnsureBackgroundResolved()

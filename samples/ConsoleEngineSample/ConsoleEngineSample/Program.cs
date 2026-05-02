@@ -7,6 +7,7 @@ using LiveChartsCore.Console;
 using LiveChartsCore.Console.Painting;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.Kernel.Sketches;
+using LiveChartsCore.Measure;
 
 // ----------------------------------------------------------------------------
 // Renders a chart in the terminal. Pick which series kind to render with
@@ -116,11 +117,16 @@ InMemoryConsoleChart chart = kind switch
         Series = SelectSeries(args),
         XAxes = [new Axis { Labels = HeatXLabels }],
         YAxes = [new Axis { Labels = HeatYLabels }],
+        // Heat is categorical on both axes — pan/zoom would slide whole cells in and out
+        // of view, which works but isn't very meaningful. Leave it disabled for heat.
     },
     _ => new CartesianChart
     {
         RenderMode = mode,
         Series = SelectSeries(args),
+        // Default ZoomMode = None means mouse wheel and click-drag are no-ops. Enable
+        // both axes here so cartesian samples are pannable / zoomable out of the box.
+        ZoomMode = ZoomAndPanMode.X | ZoomAndPanMode.Y,
     },
 };
 
@@ -163,6 +169,12 @@ if (args.Contains("--tooltip"))
         {
             try { await Task.Delay(50, cts.Token); }
             catch (OperationCanceledException) { return; }
+
+            // Back off when real mouse input is recent — otherwise the auto-scan and the
+            // mouse-driven SimulatePointerMove race for the tooltip cursor and it ends up
+            // jumping between "wherever the scan is" and "where the mouse pointer is".
+            // The scan is meant for headless / piped output, not for live + TTY.
+            if ((DateTime.UtcNow - chart.LastMouseInputTimeUtc).TotalSeconds < 2) continue;
 
             var elapsed = (DateTime.UtcNow - tooltipStart).TotalSeconds;
             var phase = elapsed / 4 % 1.0;
@@ -463,20 +475,26 @@ async Task RunGridAsync()
         return c;
     }
 
+    // ZoomMode = X|Y enables mouse-wheel zoom and click-drag pan on each cartesian chart.
+    // Heat is left at None (default) since its categorical axes don't pan/zoom meaningfully.
+    var both = ZoomAndPanMode.X | ZoomAndPanMode.Y;
     var lineChart = (CartesianChart)Configure(new CartesianChart
     {
         RenderMode = mode,
         Series = [new LineSeries<double>(lineData) { Name = "Line", GeometrySize = 0, LineSmoothness = 0.65 }],
+        ZoomMode = both,
     });
     var columnChart = (CartesianChart)Configure(new CartesianChart
     {
         RenderMode = mode,
         Series = [new ColumnSeries<double>(barData) { Name = "Bars" }],
+        ZoomMode = both,
     });
     var scatterChart = (CartesianChart)Configure(new CartesianChart
     {
         RenderMode = mode,
         Series = [new ScatterSeries<ObservablePoint>(scatterData) { Name = "Scatter", GeometrySize = 8 }],
+        ZoomMode = both,
     });
     var heatChart = (CartesianChart)Configure(new CartesianChart
     {
@@ -495,6 +513,44 @@ async Task RunGridAsync()
         e.Cancel = true;
         gridCts.Cancel();
     };
+
+    // Run terminal detections before starting the mouse reader (which steals raw stdin).
+    // Each chart needs its own detection pass since the OSC 11 / CSI 16t responses are
+    // cached per-instance. Loop them serially so responses don't interleave.
+    foreach (var c in charts) c.EnsureTerminalDetections();
+
+    // Mouse routing: figure out which quadrant the cell falls in (using the CURRENT
+    // halfCols/halfRows, not capture — they change on resize), translate to that chart's
+    // local cell coords, dispatch the event type to the per-chart helper.
+    var mouse = new ConsoleMouse((col, row, action) =>
+    {
+        // Quadrants are positioned at (1,1), (1, halfCols+2), (halfRows+2, 1),
+        // (halfRows+2, halfCols+2). Mouse coords are 0-based, our positions are 1-based.
+        // Convert mouse to 1-based for the comparison, then pick the chart by which half.
+        var mouse1Col = col + 1;
+        var mouse1Row = row + 1;
+        var (chart, qRow, qCol) = mouse1Row <= halfRows
+            ? (mouse1Col <= halfCols
+                ? (lineChart, 1, 1)
+                : ((InMemoryConsoleChart)columnChart, 1, halfCols + 2))
+            : (mouse1Col <= halfCols
+                ? ((InMemoryConsoleChart)scatterChart, halfRows + 2, 1)
+                : ((InMemoryConsoleChart)heatChart, halfRows + 2, halfCols + 2));
+
+        var localCol = mouse1Col - qCol;
+        var localRow = mouse1Row - qRow;
+        // NoteMouseInput omitted: the --tooltip auto-scan is in the single-chart path
+        // (we returned early to RunGridAsync before it runs), so there's nothing to gate.
+        switch (action)
+        {
+            case MouseAction.Move:      chart.SimulatePointerMoveOrLeaveAtCell(localCol, localRow); break;
+            case MouseAction.Press:     chart.SimulatePointerDownAtCell(localCol, localRow); break;
+            case MouseAction.Release:   chart.SimulatePointerUpAtCell(localCol, localRow); break;
+            case MouseAction.WheelUp:   chart.SimulateZoomAtCell(localCol, localRow, zoomIn: true); break;
+            case MouseAction.WheelDown: chart.SimulateZoomAtCell(localCol, localRow, zoomIn: false); break;
+        }
+    });
+    mouse.Start(System.Console.Out);
 
     await System.Console.Out.WriteAsync("\x1b[0m\x1b[?25l\x1b[2J");
     await System.Console.Out.FlushAsync();
@@ -574,6 +630,7 @@ async Task RunGridAsync()
     }
     finally
     {
+        mouse.Stop();
         await System.Console.Out.WriteAsync("\x1b[0m\x1b[?25h\n");
         await System.Console.Out.FlushAsync(CancellationToken.None);
     }
