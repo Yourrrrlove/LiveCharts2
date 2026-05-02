@@ -12,9 +12,10 @@ using LiveChartsCore.Kernel.Sketches;
 // Renders a single chart in the terminal. Pick which series kind to render
 // with --line / --column / --row / --scatter / --step / --stackedcolumn /
 // --stackedrow / --stackedarea / --stackedsteparea / --candlestick / --box /
-// --heat / --pie / --polar. Pick render mode with --braille / --sixel
-// (default = half-block). Cartesian kinds use a CartesianChart; --pie uses
-// a PieChart; --polar uses a PolarChart.
+// --heat / --pie / --polar. Pick render mode with --halfblock / --braille /
+// --sixel — default is auto-detect (Sixel if the terminal advertises it
+// via DA1, otherwise Braille; HalfBlock stays opt-in). Cartesian kinds use
+// a CartesianChart; --pie uses a PieChart; --polar uses a PolarChart.
 //
 // Data is sampled from EasingFunctions.BounceInOut shifted by a shared offset
 // that advances every tick — produces a clean wave that scrolls across the
@@ -34,7 +35,13 @@ LiveCharts.Configure(c => c
 
 var mode = args.Contains("--sixel") ? ConsoleRenderMode.Sixel
          : args.Contains("--braille") ? ConsoleRenderMode.Braille
-         : ConsoleRenderMode.HalfBlock;
+         : args.Contains("--halfblock") ? ConsoleRenderMode.HalfBlock
+         // Default: ask the terminal what it supports. DA1 + cap 4 = Sixel; otherwise we
+         // fall through to Braille (safe everywhere a UTF-8 monospace font is). Detection
+         // is a sub-100ms terminal round-trip, only happens once, and silently degrades
+         // to Braille if stdout is redirected.
+         : ConsoleTerminal.TryDetectSixelSupport() ? ConsoleRenderMode.Sixel
+         : ConsoleRenderMode.Braille;
 
 int? sixelCw = ParseIntFlag(args, "--sixel-cw");
 int? sixelCh = ParseIntFlag(args, "--sixel-ch");

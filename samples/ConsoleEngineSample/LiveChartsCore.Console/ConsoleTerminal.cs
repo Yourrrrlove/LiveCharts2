@@ -122,6 +122,58 @@ public static class ConsoleTerminal
         }
     }
 
+    /// <summary>
+    /// Queries the terminal for its Primary Device Attributes via the DA1 sequence
+    /// (<c>\x1b[c</c>) and inspects the capability list for code 4 (Sixel). Modern
+    /// terminals that ship with Sixel support — Windows Terminal (recent), iTerm2,
+    /// WezTerm, ghostty, mlterm, xterm with --enable-sixel-graphics — advertise it here.
+    /// Returns false if the terminal doesn't respond, doesn't include 4, or stdin/stdout
+    /// is redirected.
+    /// </summary>
+    public static bool TryDetectSixelSupport(int timeoutMs = 100)
+    {
+        if (System.Console.IsInputRedirected || System.Console.IsOutputRedirected)
+            return false;
+
+        try
+        {
+            System.Console.Out.Write("\x1b[c");
+            System.Console.Out.Flush();
+
+            var collected = new System.Text.StringBuilder();
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+
+            while (DateTime.UtcNow < deadline)
+            {
+                if (System.Console.KeyAvailable)
+                {
+                    var key = System.Console.ReadKey(intercept: true);
+                    var ch = key.KeyChar;
+                    _ = collected.Append(ch);
+                    if (ch == 'c') break;
+                }
+                else
+                {
+                    Thread.Sleep(5);
+                }
+            }
+
+            // Response: ESC [ ? <terminal-class> ; <cap1> ; <cap2> ; ... c
+            // Sixel capability is code 4. Match the parameter run between ? and c, then
+            // split on ';' so we don't accidentally match "14" or "40" as "4".
+            var match = Regex.Match(collected.ToString(), @"\[\?([\d;]+)c");
+            if (!match.Success) return false;
+
+            foreach (var cap in match.Groups[1].Value.Split(';'))
+                if (cap == "4") return true;
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static byte ScaleHexComponent(string hex)
     {
         if (string.IsNullOrEmpty(hex)) return 0;
