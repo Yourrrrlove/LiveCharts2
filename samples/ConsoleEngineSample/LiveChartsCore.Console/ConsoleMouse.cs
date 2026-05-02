@@ -14,6 +14,13 @@ namespace LiveChartsCore.Console;
 public enum MouseAction { Move, Press, Release, WheelUp, WheelDown }
 
 /// <summary>
+/// Keyboard actions surfaced by <see cref="ConsoleMouse"/>'s reader. Only a small set of
+/// known shortcuts — anything else is ignored. Quit fires on q / Q (Ctrl+C is handled
+/// separately via Console.CancelKeyPress so it works even before the reader starts).
+/// </summary>
+public enum ConsoleKeyAction { Quit, ResetZoom, ZoomIn, ZoomOut, PanUp, PanDown, PanLeft, PanRight }
+
+/// <summary>
 /// Captures terminal mouse events via xterm SGR mouse mode (CSI ?1003h + CSI ?1006h).
 /// Modern terminals (Windows Terminal, iTerm2, WezTerm, ghostty, mintty) all support it;
 /// the terminal reports each mouse interaction by injecting an escape sequence onto stdin
@@ -32,13 +39,17 @@ public enum MouseAction { Move, Press, Release, WheelUp, WheelDown }
 public sealed class ConsoleMouse : IDisposable
 {
     private readonly Action<int, int, MouseAction> _onEvent;
+    private readonly Action<ConsoleKeyAction>? _onKey;
     private TextWriter? _output;
     private CancellationTokenSource? _cts;
     private uint _originalConsoleMode;
     private bool _modeChanged;
 
-    public ConsoleMouse(Action<int, int, MouseAction> onEvent) =>
+    public ConsoleMouse(Action<int, int, MouseAction> onEvent, Action<ConsoleKeyAction>? onKey = null)
+    {
         _onEvent = onEvent;
+        _onKey = onKey;
+    }
 
     /// <summary>
     /// Enables mouse capture and starts the background reader. Bails silently if stdin or
@@ -110,11 +121,24 @@ public sealed class ConsoleMouse : IDisposable
                     var b = buffer[i];
                     switch (state)
                     {
-                        case 0: if (b == 0x1b) state = 1; break;
-                        case 1: state = b == '[' ? 2 : 0; break;
+                        case 0:
+                            if (b == 0x1b) state = 1;
+                            else DispatchKeyByte(b);
+                            break;
+                        case 1:
+                            // After ESC: '[' starts a CSI sequence (mouse SGR or arrow
+                            // keys), anything else means ESC was followed by something we
+                            // don't recognize — drop both and reset.
+                            state = b == '[' ? 2 : 0;
+                            break;
                         case 2:
                             if (b == '<') { state = 3; btn = col = row = 0; }
-                            else state = 0;
+                            else
+                            {
+                                // CSI A/B/C/D = arrow keys. Anything else: drop.
+                                DispatchArrowByte(b);
+                                state = 0;
+                            }
                             break;
                         case 3:
                             if (b >= '0' && b <= '9') btn = btn * 10 + (b - '0');
@@ -157,6 +181,42 @@ public sealed class ConsoleMouse : IDisposable
             }
         }
         catch { /* read failure or process tearing down */ }
+    }
+
+    private void DispatchKeyByte(byte b)
+    {
+        if (_onKey is null) return;
+        ConsoleKeyAction? key = b switch
+        {
+            (byte)'q' or (byte)'Q' => ConsoleKeyAction.Quit,
+            (byte)'r' or (byte)'R' => ConsoleKeyAction.ResetZoom,
+            (byte)'+' or (byte)'=' => ConsoleKeyAction.ZoomIn,
+            (byte)'-' or (byte)'_' => ConsoleKeyAction.ZoomOut,
+            _ => null,
+        };
+        if (key.HasValue)
+        {
+            try { _onKey(key.Value); }
+            catch { /* swallow — don't take down the reader for callback bugs */ }
+        }
+    }
+
+    private void DispatchArrowByte(byte b)
+    {
+        if (_onKey is null) return;
+        ConsoleKeyAction? key = b switch
+        {
+            (byte)'A' => ConsoleKeyAction.PanUp,
+            (byte)'B' => ConsoleKeyAction.PanDown,
+            (byte)'C' => ConsoleKeyAction.PanRight,
+            (byte)'D' => ConsoleKeyAction.PanLeft,
+            _ => null,
+        };
+        if (key.HasValue)
+        {
+            try { _onKey(key.Value); }
+            catch { }
+        }
     }
 
     // -------- Windows console mode --------

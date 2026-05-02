@@ -524,7 +524,11 @@ async Task RunGridAsync()
     // Mouse routing: figure out which quadrant the cell falls in (using the CURRENT
     // halfCols/halfRows, not capture — they change on resize), translate to that chart's
     // local cell coords, dispatch the event type to the per-chart helper.
-    var mouse = new ConsoleMouse((col, row, action) =>
+    //
+    // Keyboard: q quits, R resets zoom on every quadrant. Pan/zoom keys are intentionally
+    // not routed here — pan/zoom on a 2x2 grid is ambiguous (which chart?) and the mouse
+    // handles per-quadrant interaction cleanly anyway.
+    var mouse = new ConsoleMouse(onEvent: (col, row, action) =>
     {
         // Quadrants are positioned at (1,1), (1, halfCols+2), (halfRows+2, 1),
         // (halfRows+2, halfCols+2). Mouse coords are 0-based, our positions are 1-based.
@@ -550,6 +554,18 @@ async Task RunGridAsync()
             case MouseAction.Release:   chart.SimulatePointerUpAtCell(localCol, localRow); break;
             case MouseAction.WheelUp:   chart.SimulateZoomAtCell(localCol, localRow, zoomIn: true); break;
             case MouseAction.WheelDown: chart.SimulateZoomAtCell(localCol, localRow, zoomIn: false); break;
+        }
+    },
+    onKey: action =>
+    {
+        switch (action)
+        {
+            case ConsoleKeyAction.Quit:
+                gridCts.Cancel();
+                break;
+            case ConsoleKeyAction.ResetZoom:
+                foreach (var c in charts) c.ResetZoom();
+                break;
         }
     });
     mouse.Start(System.Console.Out);

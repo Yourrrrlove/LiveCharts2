@@ -228,47 +228,58 @@ public abstract class InMemoryConsoleChart
         // before our helpers can pick them up.
         EnsureTerminalDetections();
 
+        // Linked CTS so q / Q can quit alongside the caller's ct.
+        using var loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         // Mouse capture: hover drives tooltips, click-and-drag drives pan, wheel zooms in/out
         // around the cursor. The engine handles pan internally — once a Press fires it sets
         // _isPanning, then subsequent Move events go to the panning throttler instead of the
         // tooltip throttler. Release clears the flag and Move resumes feeding hover.
-        var mouse = new ConsoleMouse((col, row, action) =>
-        {
-            NoteMouseInput();
-            switch (action)
+        //
+        // Keyboard: q/Q quits, R resets zoom, +/- zoom at chart center, arrow keys pan by
+        // 1/8 of the draw margin in that direction.
+        var mouse = new ConsoleMouse(
+            onEvent: (col, row, action) =>
             {
-                case MouseAction.Move:
-                    SimulatePointerMoveOrLeaveAtCell(col, row);
-                    break;
-                case MouseAction.Press:
-                    SimulatePointerDownAtCell(col, row);
-                    break;
-                case MouseAction.Release:
-                    SimulatePointerUpAtCell(col, row);
-                    break;
-                case MouseAction.WheelUp:
-                    SimulateZoomAtCell(col, row, zoomIn: true);
-                    break;
-                case MouseAction.WheelDown:
-                    SimulateZoomAtCell(col, row, zoomIn: false);
-                    break;
-            }
-        });
+                NoteMouseInput();
+                switch (action)
+                {
+                    case MouseAction.Move:      SimulatePointerMoveOrLeaveAtCell(col, row); break;
+                    case MouseAction.Press:     SimulatePointerDownAtCell(col, row); break;
+                    case MouseAction.Release:   SimulatePointerUpAtCell(col, row); break;
+                    case MouseAction.WheelUp:   SimulateZoomAtCell(col, row, zoomIn: true); break;
+                    case MouseAction.WheelDown: SimulateZoomAtCell(col, row, zoomIn: false); break;
+                }
+            },
+            onKey: action =>
+            {
+                switch (action)
+                {
+                    case ConsoleKeyAction.Quit:      loopCts.Cancel(); break;
+                    case ConsoleKeyAction.ResetZoom: ResetZoom(); break;
+                    case ConsoleKeyAction.ZoomIn:    SimulateZoomAtCenter(true); break;
+                    case ConsoleKeyAction.ZoomOut:   SimulateZoomAtCenter(false); break;
+                    case ConsoleKeyAction.PanUp:     SimulatePan(0, +PanStepPx); break;
+                    case ConsoleKeyAction.PanDown:   SimulatePan(0, -PanStepPx); break;
+                    case ConsoleKeyAction.PanLeft:   SimulatePan(+PanStepPx, 0); break;
+                    case ConsoleKeyAction.PanRight:  SimulatePan(-PanStepPx, 0); break;
+                }
+            });
         mouse.Start(output);
 
         await output.WriteAsync("\x1b[0m\x1b[?25l\x1b[2J");
 
         try
         {
-            while (!ct.IsCancellationRequested)
+            while (!loopCts.IsCancellationRequested)
             {
                 AdaptToTerminalSize();
 
                 var frame = RenderFrame(home: true);
                 await output.WriteAsync(frame);
-                await output.FlushAsync(ct);
+                await output.FlushAsync(loopCts.Token);
 
-                try { await Task.Delay(period, ct); }
+                try { await Task.Delay(period, loopCts.Token); }
                 catch (OperationCanceledException) { break; }
             }
         }
@@ -279,6 +290,12 @@ public abstract class InMemoryConsoleChart
             await output.FlushAsync(CancellationToken.None);
         }
     }
+
+    /// <summary>
+    /// Pan step in surface pixels per arrow-key tap. Sized so a single tap is visible but
+    /// holding the key (auto-repeat) still gives reasonable cursor-keys-feel scrolling.
+    /// </summary>
+    private const int PanStepPx = 30;
 
     /// <summary>
     /// Convenience: one-shot render + write to stdout.
@@ -383,6 +400,44 @@ public abstract class InMemoryConsoleChart
         // ZoomMode lives on the view (the chart class), accessed via ICartesianChartView.
         var mode = ((ICartesianChartView)cartesian.View).ZoomMode;
         cartesian.Zoom(mode, pivot, direction);
+    }
+
+    /// <summary>
+    /// Keyboard-shortcut zoom: pivot at the chart's draw-margin center. Used by + / -.
+    /// </summary>
+    public void SimulateZoomAtCenter(bool zoomIn)
+    {
+        if (GetCoreChart() is not CartesianChartEngine cartesian) return;
+        var pivot = new LvcPoint(
+            cartesian.DrawMarginLocation.X + cartesian.DrawMarginSize.Width / 2,
+            cartesian.DrawMarginLocation.Y + cartesian.DrawMarginSize.Height / 2);
+        var direction = zoomIn ? ZoomDirection.ZoomIn : ZoomDirection.ZoomOut;
+        var mode = ((ICartesianChartView)cartesian.View).ZoomMode;
+        cartesian.Zoom(mode, pivot, direction);
+    }
+
+    /// <summary>
+    /// Keyboard-shortcut pan: shifts the visible range by (dxPix, dyPix) in surface pixel
+    /// coords. Engine treats positive dx as "drag right" (so panning right shows data
+    /// further to the right). Used by arrow keys.
+    /// </summary>
+    public void SimulatePan(int dxPix, int dyPix)
+    {
+        if (GetCoreChart() is not CartesianChartEngine cartesian) return;
+        var mode = ((ICartesianChartView)cartesian.View).ZoomMode;
+        cartesian.Pan(mode, new LvcPoint(dxPix, dyPix));
+    }
+
+    /// <summary>
+    /// Clears any user-applied axis limits so the chart auto-fits its data again. Used by
+    /// the R keyboard shortcut. No-op for non-cartesian charts (their zoom is handled
+    /// differently or doesn't apply).
+    /// </summary>
+    public void ResetZoom()
+    {
+        if (GetCoreChart() is not CartesianChartEngine cartesian) return;
+        foreach (var axis in cartesian.XAxes) { axis.MinLimit = null; axis.MaxLimit = null; }
+        foreach (var axis in cartesian.YAxes) { axis.MinLimit = null; axis.MaxLimit = null; }
     }
 
     /// <summary>
