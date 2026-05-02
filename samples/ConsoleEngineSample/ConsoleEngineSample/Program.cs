@@ -60,7 +60,7 @@ var barData = new ObservableCollection<double>(Bounce(Bars, PhaseBars, sharedOff
 var scatterData = new ObservableCollection<ObservablePoint>(Scatter(ScatterPoints, sharedOffset));
 var stack1Data = new ObservableCollection<double>(Bounce(Bars, PhaseStackedA, sharedOffset, signed: false));
 var stack2Data = new ObservableCollection<double>(Bounce(Bars, PhaseStackedB, sharedOffset, signed: false));
-var candleData = new ObservableCollection<FinancialPoint>(Candles(Bars, sharedOffset));
+var candleData = new ObservableCollection<FinancialPointI>(Candles(Bars, sharedOffset));
 var boxData = new ObservableCollection<BoxValue>(Boxes(Bars, sharedOffset));
 
 ISeries[] series = SelectSeries(args);
@@ -104,10 +104,10 @@ _ = Task.Run(async () =>
 {
     while (!cts.IsCancellationRequested)
     {
-        try { await Task.Delay(250, cts.Token); }
+        try { await Task.Delay(200, cts.Token); }
         catch (OperationCanceledException) { return; }
 
-        sharedOffset += 0.04;
+        sharedOffset += 0.025;
 
         lock (chart.SyncRoot)
         {
@@ -147,7 +147,7 @@ ISeries[] SelectSeries(string[] argv) => SelectedKind(argv) switch
         new StackedRowSeries<double>(stack2Data) { Name = "B" }
     ],
     "candlestick" => [
-        new CandlestickSeries<FinancialPoint>(candleData) { Name = "OHLC" }
+        new CandlestickSeries<FinancialPointI>(candleData) { Name = "OHLC" }
     ],
     "box" => [
         new BoxSeries<BoxValue>(boxData) { Name = "Distribution" }
@@ -171,8 +171,11 @@ static string SelectedKind(string[] argv)
 }
 
 // ----------------------------------------------------------------------------
-// Data shapers — all sample EasingFunctions.BounceInOut at (i / (n-1) + phase
-// + offset), wrapped to [0, 1]. "signed" centers the result around zero.
+// Data shapers — sum of three phase-shifted sines at golden-ratio harmonics.
+// The traveling-wave term (-t * speed) makes each frequency component scroll
+// across the chart at a slightly different rate, so the curve never quite
+// loops onto itself and the eye sees an organic, evolving pattern.
+// "signed" leaves the result in roughly [-1, 1]; otherwise it's mapped to [0, 1].
 // ----------------------------------------------------------------------------
 
 static double[] Bounce(int n, double phase, double offset, bool signed)
@@ -187,12 +190,17 @@ static void ApplyBounce(IList<double> dst, double phase, double offset, bool sig
     for (var i = 0; i < dst.Count; i++) dst[i] = SampleBounce(i, dst.Count, phase, offset, signed);
 }
 
-static double SampleBounce(int i, int n, double phase, double offset, bool signed)
+static double SampleBounce(double i, int n, double phase, double offset, bool signed)
 {
-    var x = i / (double)(n - 1) + phase + offset;
-    x = ((x % 1) + 1) % 1; // wrap to [0, 1]
-    var v = EasingFunctions.BounceInOut((float)x);
-    return signed ? v * 2 - 1 : v;
+    var x = i / (double)(n - 1);
+    var t = offset * 2 * Math.PI;
+    var p = phase * 2 * Math.PI;
+
+    var w = 0.65 * Math.Sin(2 * Math.PI * 1.000 * x - t * 1.0 + p)
+          + 0.30 * Math.Sin(2 * Math.PI * 1.618 * x - t * 0.7 + p * 1.3)
+          + 0.10 * Math.Sin(2 * Math.PI * 2.618 * x - t * 1.3 + p * 0.5);
+
+    return signed ? w : (w + 1) * 0.5; // roughly [0, 1] for unsigned (stacked).
 }
 
 // Scatter — X bounces along one phase, Y along another, so points trace a
@@ -223,29 +231,44 @@ static ObservablePoint ScatterPoint(int i, int n, double offset)
 }
 
 // Candlesticks — bounce drives the close price; high/low expand around it.
-static FinancialPoint[] Candles(int n, double offset)
+static FinancialPointI[] Candles(int n, double offset)
 {
-    var data = new FinancialPoint[n];
+    var data = new FinancialPointI[n];
     for (var i = 0; i < n; i++) data[i] = CandlePoint(i, n, offset);
     return data;
 }
 
-static void ApplyCandles(IList<FinancialPoint> dst, double offset)
+static void ApplyCandles(IList<FinancialPointI> dst, double offset)
 {
+    // Mutate in-place rather than replacing the FinancialPointI instance: replacement
+    // fires a Replace notification that the chart treats as "remove + add a different
+    // entity", which restarts the candle's tween from zero every tick. Property mutation
+    // triggers INotifyPropertyChanged on the same entity, so the existing tween redirects
+    // smoothly to the new target without losing its mid-flight position.
     for (var i = 0; i < dst.Count; i++)
     {
-        var c = CandlePoint(i, dst.Count, offset);
-        dst[i] = c;
+        var existing = dst[i];
+        var next = CandlePoint(i, dst.Count, offset);
+        existing.High = next.High;
+        existing.Open = next.Open;
+        existing.Close = next.Close;
+        existing.Low = next.Low;
     }
 }
 
-static FinancialPoint CandlePoint(int i, int n, double offset)
+static FinancialPointI CandlePoint(int i, int n, double offset)
 {
-    var close = 100 + SampleBounce(i, n, 0.05, offset, signed: true) * 5;
-    var open = 100 + SampleBounce(i - 1, n, 0.05, offset, signed: true) * 5;
+    // Open and close are samples from the *same* smooth wave taken half a step apart —
+    // each candle's up/down direction is just the local slope of one continuous curve,
+    // so adjacent candles correlate and the body color changes gradually as the wave
+    // scrolls. The original formulation (open from i-1, close from i) read two
+    // independent wave samples; correct in the limit but the slope at each i changed
+    // faster than a viewer's "candle expectation", which made bodies flip erratically.
+    var open = 100 + SampleBounce(i, n, 0.05, offset, signed: true) * 5;
+    var close = 100 + SampleBounce(i + 0.5, n, 0.05, offset, signed: true) * 5;
     var high = Math.Max(open, close) + 1.5 + SampleBounce(i, n, 0.30, offset, signed: false) * 1.5;
     var low = Math.Min(open, close) - 1.5 - SampleBounce(i, n, 0.40, offset, signed: false) * 1.5;
-    return new FinancialPoint(DateTime.Today.AddDays(i), high, open, close, low);
+    return new FinancialPointI(high, open, close, low);
 }
 
 // Boxes — bounced median + bounce-modulated spread so the boxes breathe in/out.
@@ -258,14 +281,31 @@ static BoxValue[] Boxes(int n, double offset)
 
 static void ApplyBoxes(IList<BoxValue> dst, double offset)
 {
-    for (var i = 0; i < dst.Count; i++) dst[i] = BoxPoint(i, dst.Count, offset);
+    // Same in-place mutation as ApplyCandles — see comment there for the reasoning.
+    for (var i = 0; i < dst.Count; i++)
+    {
+        var existing = dst[i];
+        var next = BoxPoint(i, dst.Count, offset);
+        existing.Max = next.Max;
+        existing.ThirdQuartile = next.ThirdQuartile;
+        existing.Median = next.Median;
+        existing.FirtQuartile = next.FirtQuartile;
+        existing.Min = next.Min;
+    }
 }
 
 static BoxValue BoxPoint(int i, int n, double offset)
 {
     var center = 70 + SampleBounce(i, n, 0.05, offset, signed: true) * 10;
     var spread = 4 + SampleBounce(i, n, 0.30, offset, signed: false) * 6;
-    return new BoxValue(center + spread + 2, center + spread / 2, center - spread / 2, center, center - spread - 2);
+    // BoxValue ctor is (max, thirdQuartile, firstQuartile, min, median) — not the order
+    // most box-plot libraries use. Use named args so the next reader doesn't get tripped.
+    return new BoxValue(
+        max: center + spread + 2,
+        thirdQuartile: center + spread / 2,
+        firstQuartile: center - spread / 2,
+        min: center - spread - 2,
+        median: center);
 }
 
 static int? ParseIntFlag(string[] argv, string flag)
