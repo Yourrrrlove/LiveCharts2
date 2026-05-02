@@ -152,9 +152,10 @@ public static class LiveChartsConsole
                     pie.Stroke = null;
                     pie.Fill = new SolidColorPaint(color);
 
-                    // Default HoverPushout is 20 — too much for terminal-pixel densities
-                    // where 8 already reads as a clear separation from the rest of the pie.
-                    pie.HoverPushout = 8;
+                    // Match SkiaSharp's default HoverPushout (20) — at terminal pixel
+                    // densities with a typical 1200x660 Sixel surface and a ~300px pie
+                    // radius, 8 read as ~3% of the radius and was barely perceptible.
+                    pie.HoverPushout = 20;
                     _ = pie.HasState("Hover", [
                         (nameof(BaseDoughnutGeometry.PushOut), (float)pie.HoverPushout),
                         (nameof(DrawnGeometry.Opacity), 0.8f),

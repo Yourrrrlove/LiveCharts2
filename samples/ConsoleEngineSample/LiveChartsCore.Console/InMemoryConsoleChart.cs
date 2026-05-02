@@ -191,7 +191,13 @@ public abstract class InMemoryConsoleChart
             // Idempotent — Load is invoked once in the constructor; this just guards re-entry.
             coreChart.IsLoaded = true;
 
-            coreChart.Measure();
+            // DON'T call coreChart.Measure() here — the engine's own update throttler runs
+            // Measure when data changes (INPC propagates through DataFactory → chart.Update).
+            // Calling it every render frame meant CorePieSeries reset
+            // dougnutGeometry.PushOut = (float)Pushout = 0 each frame, which clobbered the
+            // Hover state's PushOut animation toward HoverPushout. The visible symptom was
+            // "slice tries to push out, snaps back, repeats." Animations are driven by
+            // motion-property tweens during DrawFrame; no Measure needed for them.
             coreChart.Canvas.DrawFrame(new ConsoleDrawingContext(CoreCanvas, surface, Background));
             RenderTooltipOverlay(surface);
 
