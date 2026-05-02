@@ -12,7 +12,7 @@ using LiveChartsCore.Kernel.Sketches;
 // Renders a single CartesianChart series in the terminal. Pick which series
 // kind to render with --line / --column / --row / --scatter / --step /
 // --stackedcolumn / --stackedrow / --stackedarea / --stackedsteparea /
-// --candlestick / --box. Pick render mode with --braille / --sixel
+// --candlestick / --box / --heat. Pick render mode with --braille / --sixel
 // (default = half-block).
 //
 // Data is sampled from EasingFunctions.BounceInOut shifted by a shared offset
@@ -49,6 +49,8 @@ catch (System.IO.IOException) { cols = 120; rows = 30; }
 const int Points = 32;          // line/step
 const int Bars = 16;            // column/row/stacked
 const int ScatterPoints = 24;
+const int HeatCols = 16;        // heat — X grid size
+const int HeatRows = 12;        // heat — Y grid size
 const double PhaseLine = 0;
 const double PhaseBars = 0.15;
 const double PhaseStackedA = 0;
@@ -63,6 +65,7 @@ var stack1Data = new ObservableCollection<double>(Bounce(Bars, PhaseStackedA, sh
 var stack2Data = new ObservableCollection<double>(Bounce(Bars, PhaseStackedB, sharedOffset, signed: false));
 var candleData = new ObservableCollection<FinancialPointI>(Candles(Bars, sharedOffset));
 var boxData = new ObservableCollection<BoxValue>(Boxes(Bars, sharedOffset));
+var heatData = new ObservableCollection<WeightedPoint>(Heat(HeatCols, HeatRows, sharedOffset));
 
 ISeries[] series = SelectSeries(args);
 
@@ -119,6 +122,7 @@ _ = Task.Run(async () =>
             ApplyBounce(stack2Data, PhaseStackedB, sharedOffset, signed: false);
             ApplyCandles(candleData, sharedOffset);
             ApplyBoxes(boxData, sharedOffset);
+            ApplyHeat(heatData, HeatCols, HeatRows, sharedOffset);
         }
     }
 });
@@ -161,6 +165,9 @@ ISeries[] SelectSeries(string[] argv) => SelectedKind(argv) switch
     "box" => [
         new BoxSeries<BoxValue>(boxData) { Name = "Distribution" }
     ],
+    "heat" => [
+        new HeatSeries<WeightedPoint>(heatData) { Name = "Heat" }
+    ],
     _ => [
         new LineSeries<double>(lineData) { Name = "Signal", GeometrySize = 0, LineSmoothness = 0.65 }
     ]
@@ -178,6 +185,7 @@ static string SelectedKind(string[] argv)
     if (argv.Contains("--stackedsteparea")) return "stackedsteparea";
     if (argv.Contains("--candlestick")) return "candlestick";
     if (argv.Contains("--box")) return "box";
+    if (argv.Contains("--heat")) return "heat";
     return "line";
 }
 
@@ -317,6 +325,37 @@ static BoxValue BoxPoint(int i, int n, double offset)
         firstQuartile: center - spread / 2,
         min: center - spread - 2,
         median: center);
+}
+
+// Heat — 2D grid of WeightedPoint(x, y, weight). Weight is driven by a 2D scrolling wave so
+// the heatmap "breathes" with the offset. X and Y are fixed grid coords (set once); only the
+// Weight property mutates each tick.
+static WeightedPoint[] Heat(int cols, int rows, double offset)
+{
+    var data = new WeightedPoint[cols * rows];
+    for (var x = 0; x < cols; x++)
+        for (var y = 0; y < rows; y++)
+            data[x * rows + y] = new WeightedPoint(x, y, HeatWeight(x, y, cols, rows, offset));
+    return data;
+}
+
+static void ApplyHeat(IList<WeightedPoint> dst, int cols, int rows, double offset)
+{
+    for (var x = 0; x < cols; x++)
+        for (var y = 0; y < rows; y++)
+            dst[x * rows + y].Weight = HeatWeight(x, y, cols, rows, offset);
+}
+
+static double HeatWeight(int xi, int yi, int cols, int rows, double offset)
+{
+    var x = xi / (double)(cols - 1);
+    var y = yi / (double)(rows - 1);
+    var t = offset * 2 * Math.PI;
+    // Two phase-shifted 2D sines — each travels in its own direction so the gradient
+    // doesn't repeat as a simple horizontal slide.
+    var w = 0.6 * Math.Sin(2 * Math.PI * x - t) * Math.Cos(2 * Math.PI * y - t * 0.5)
+          + 0.4 * Math.Sin(2 * Math.PI * 1.5 * x + 2 * Math.PI * y - t * 0.7);
+    return (w + 1) * 0.5; // map to roughly [0, 1]
 }
 
 static int? ParseIntFlag(string[] argv, string flag)
