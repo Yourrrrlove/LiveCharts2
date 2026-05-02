@@ -134,6 +134,12 @@ public static class LiveChartsConsole
                     var color = theme.GetSeriesColor(box);
                     box.Stroke = new SolidColorPaint(color, 1f);
                     box.Fill = null;
+                })
+                .HasRuleForPieSeries(pie =>
+                {
+                    var color = theme.GetSeriesColor(pie);
+                    pie.Stroke = null;
+                    pie.Fill = new SolidColorPaint(color);
                 }));
 }
 

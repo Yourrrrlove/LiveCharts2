@@ -9,11 +9,11 @@ using LiveChartsCore.Defaults;
 using LiveChartsCore.Kernel.Sketches;
 
 // ----------------------------------------------------------------------------
-// Renders a single CartesianChart series in the terminal. Pick which series
-// kind to render with --line / --column / --row / --scatter / --step /
-// --stackedcolumn / --stackedrow / --stackedarea / --stackedsteparea /
-// --candlestick / --box / --heat. Pick render mode with --braille / --sixel
-// (default = half-block).
+// Renders a single chart in the terminal. Pick which series kind to render
+// with --line / --column / --row / --scatter / --step / --stackedcolumn /
+// --stackedrow / --stackedarea / --stackedsteparea / --candlestick / --box /
+// --heat / --pie. Pick render mode with --braille / --sixel (default =
+// half-block). All cartesian kinds use a CartesianChart; --pie uses a PieChart.
 //
 // Data is sampled from EasingFunctions.BounceInOut shifted by a shared offset
 // that advances every tick — produces a clean wave that scrolls across the
@@ -51,6 +51,7 @@ const int Bars = 16;            // column/row/stacked
 const int ScatterPoints = 24;
 const int HeatCols = 16;        // heat — X grid size
 const int HeatRows = 12;        // heat — Y grid size
+const int PieSlices = 6;        // pie — number of wedges
 const double PhaseLine = 0;
 const double PhaseBars = 0.15;
 const double PhaseStackedA = 0;
@@ -66,14 +67,27 @@ var stack2Data = new ObservableCollection<double>(Bounce(Bars, PhaseStackedB, sh
 var candleData = new ObservableCollection<FinancialPointI>(Candles(Bars, sharedOffset));
 var boxData = new ObservableCollection<BoxValue>(Boxes(Bars, sharedOffset));
 var heatData = new ObservableCollection<WeightedPoint>(Heat(HeatCols, HeatRows, sharedOffset));
+var pieData = new ObservableValue[PieSlices];
+for (var i = 0; i < PieSlices; i++) pieData[i] = new ObservableValue(SamplePieValue(i, sharedOffset));
 
-ISeries[] series = SelectSeries(args);
+var kind = SelectedKind(args);
 
-var chart = new CartesianChart
-{
-    RenderMode = mode,
-    Series = series
-};
+// PieChart and CartesianChart share the same InMemoryConsoleChart base — they expose the
+// same RenderMode / SixelCellWidth / Render / RenderLoop surface — so we keep the rest of
+// the program polymorphic against that base after this branch.
+InMemoryConsoleChart chart = kind == "pie"
+    ? new PieChart
+    {
+        RenderMode = mode,
+        Series = pieData
+            .Select((pv, i) => (ISeries)new PieSeries<ObservableValue>(pv) { Name = $"S{i}" })
+            .ToArray(),
+    }
+    : new CartesianChart
+    {
+        RenderMode = mode,
+        Series = SelectSeries(args),
+    };
 
 // Only set SixelCellWidth/Height when the user provided a CLI flag — otherwise leave them
 // alone so the chart can auto-detect the terminal's real cell pixel size at first render.
@@ -90,7 +104,7 @@ if (forceSnapshot || (!forceLive && System.Console.IsOutputRedirected))
 {
     File.WriteAllText("chart.ansi", chart.Render(home: false));
     System.Console.WriteLine(
-        $"Rendered {chart.Width}x{chart.Height} sub-pixels ({cols}x{rows} cells, mode={mode}, kind={SelectedKind(args)}) to chart.ansi.");
+        $"Rendered {chart.Width}x{chart.Height} sub-pixels ({cols}x{rows} cells, mode={mode}, kind={kind}) to chart.ansi.");
     return;
 }
 
@@ -123,6 +137,7 @@ _ = Task.Run(async () =>
             ApplyCandles(candleData, sharedOffset);
             ApplyBoxes(boxData, sharedOffset);
             ApplyHeat(heatData, HeatCols, HeatRows, sharedOffset);
+            ApplyPie(pieData, sharedOffset);
         }
     }
 });
@@ -186,6 +201,7 @@ static string SelectedKind(string[] argv)
     if (argv.Contains("--candlestick")) return "candlestick";
     if (argv.Contains("--box")) return "box";
     if (argv.Contains("--heat")) return "heat";
+    if (argv.Contains("--pie")) return "pie";
     return "line";
 }
 
@@ -325,6 +341,22 @@ static BoxValue BoxPoint(int i, int n, double offset)
         firstQuartile: center - spread / 2,
         min: center - spread - 2,
         median: center);
+}
+
+// Pie — slice values are independent slow oscillators around a positive midpoint, so wedge
+// sizes shift but stay roughly proportional. Each slice gets its own ObservableValue and is
+// mutated in place (Value setter triggers INPC; the chart redirects the in-flight tween).
+static void ApplyPie(ObservableValue[] data, double offset)
+{
+    for (var i = 0; i < data.Length; i++) data[i].Value = SamplePieValue(i, offset);
+}
+
+static double SamplePieValue(int i, double offset)
+{
+    var t = offset * 2 * Math.PI;
+    // Floor of 1 keeps every wedge visible; oscillation amplitude of 4 means the relative
+    // share of any one wedge can roughly double or halve as the offset advances.
+    return 1 + (Math.Sin(t * 0.6 + i * 0.8) + 1) * 2;
 }
 
 // Heat — 2D grid of WeightedPoint(x, y, weight). Weight is driven by a 2D scrolling wave so
