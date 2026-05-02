@@ -7,6 +7,7 @@ using LiveChartsCore.Kernel.Sketches;
 using LiveChartsCore.Measure;
 using LiveChartsCore.Painting;
 using LiveChartsCore.Themes;
+using LiveChartsCore.VisualStates;
 using LvcEasings = LiveChartsCore.EasingFunctions;
 
 namespace LiveChartsCore.Console;
@@ -61,6 +62,16 @@ public static class LiveChartsConsole
                     {
                         axis.SeparatorsPaint = new SolidColorPaint(lineColor);
                     }
+                })
+                .HasRuleForAnySeries(series =>
+                {
+                    // Series.OnPointerEnter / OnPointerLeft do VisualStates["Hover"] without
+                    // a TryGetValue, so a missing Hover state throws KeyNotFoundException
+                    // during tooltip dispatch. We don't want any visual effect on hover
+                    // (terminal pixels are too coarse for scale/opacity changes to read), so
+                    // register Hover with no setters — SetState then iterates an empty list
+                    // and just records that the state is active.
+                    _ = series.HasState("Hover", []);
                 })
                 .HasRuleForLineSeries(line =>
                 {
