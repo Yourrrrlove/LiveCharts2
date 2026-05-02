@@ -76,9 +76,19 @@ public class ConsoleTooltip : IChartTooltip
             var lineX = boxX + padCols * charW;
             var lineY = boxY + 1 + i * charH;
             if (surface.Mode == ConsoleRenderMode.Sixel)
+            {
+                // Sixel writes glyph pixels directly into the rasterized image — the box
+                // FillRect we already did is fully visible behind them. No per-glyph bg needed.
                 BitmapFont.DrawText(surface, lineX, lineY, lines[i], fg);
+            }
             else
-                surface.DrawText(lineX, lineY, lines[i], fg);
+            {
+                // Cell-grid modes write glyph cells that supersede any pixels beneath them
+                // (so the FillRect we did doesn't show through where text is). Pass `bg`
+                // explicitly so each text cell renders on the tooltip box's background
+                // instead of falling back to the surface's terminal-default color.
+                surface.DrawText(lineX, lineY, lines[i], fg, bg);
+            }
         }
     }
 
