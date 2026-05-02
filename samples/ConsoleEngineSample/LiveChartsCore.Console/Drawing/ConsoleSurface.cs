@@ -117,10 +117,20 @@ public sealed class ConsoleSurface
 
     public void FillRect(int x, int y, int w, int h, LvcColor color)
     {
-        var x0 = Math.Max(0, x);
-        var y0 = Math.Max(0, y);
-        var x1 = Math.Min(Width, x + w);
-        var y1 = Math.Min(Height, y + h);
+        // Normalize negative dimensions before clipping. Stacked-row bar geometries (and the
+        // descending half of any "value crosses zero" stack) come through with negative
+        // Width — see StackedRowSeriesTest.cs:54's TODO. Without normalization, x + w < x
+        // makes the clipped range empty and the bar draws nothing.
+        var ax = Math.Min(x, x + w);
+        var ay = Math.Min(y, y + h);
+        var bx = Math.Max(x, x + w);
+        var by = Math.Max(y, y + h);
+
+        var x0 = Math.Max(0, ax);
+        var y0 = Math.Max(0, ay);
+        var x1 = Math.Min(Width, bx);
+        var y1 = Math.Min(Height, by);
+
         for (var py = y0; py < y1; py++)
             for (var px = x0; px < x1; px++)
                 SetPixel(px, py, color);
@@ -128,11 +138,18 @@ public sealed class ConsoleSurface
 
     public void StrokeRect(int x, int y, int w, int h, LvcColor color)
     {
-        if (w <= 0 || h <= 0) return;
-        DrawLine(x, y, x + w - 1, y, color);
-        DrawLine(x, y + h - 1, x + w - 1, y + h - 1, color);
-        DrawLine(x, y, x, y + h - 1, color);
-        DrawLine(x + w - 1, y, x + w - 1, y + h - 1, color);
+        // Same negative-dim normalization as FillRect — stacked geometries can hand us
+        // (x, y, w<0, h>0) and we need to draw the equivalent positive-axis rectangle.
+        var ax = Math.Min(x, x + w);
+        var ay = Math.Min(y, y + h);
+        var bx = Math.Max(x, x + w);
+        var by = Math.Max(y, y + h);
+        if (bx <= ax || by <= ay) return;
+
+        DrawLine(ax, ay, bx - 1, ay, color);
+        DrawLine(ax, by - 1, bx - 1, by - 1, color);
+        DrawLine(ax, ay, ax, by - 1, color);
+        DrawLine(bx - 1, ay, bx - 1, by - 1, color);
     }
 
     /// <summary>
