@@ -133,6 +133,8 @@ public sealed class ConsoleSurface
         // is active, and tighter rejection when CanvasZone.DrawMargin is in effect.
         if (x < _clipX0 || y < _clipY0 || x >= _clipX1 || y >= _clipY1) return;
 
+        if (color.A < 255) color = BlendWithBackground(color);
+
         if (_pixels is not null)
         {
             _pixels[y, x] = color;
@@ -142,6 +144,27 @@ public sealed class ConsoleSurface
         ref var hb = ref _hb![y >> 1, x];
         if ((y & 1) == 0) hb.Top = color;
         else hb.Bottom = color;
+    }
+
+    /// <summary>
+    /// Flattens a translucent color against <see cref="Background"/>. We don't carry per-
+    /// pixel alpha through the encoders (Sixel / cell-grid both want opaque RGB at write
+    /// time), so this is the alpha approximation: blend each translucent draw against the
+    /// chart's background once at SetPixel time. Skips compositing against whatever was
+    /// previously drawn — overlapping translucent shapes won't accumulate, but for chart
+    /// fills at terminal pixel densities the visual difference is invisible.
+    /// </summary>
+    private LvcColor BlendWithBackground(LvcColor color)
+    {
+        // If detection failed and the user didn't set a background explicitly, fall back
+        // to the same dark default the Sixel encoder uses so the math stays consistent.
+        var bg = Background.A != 0 ? Background : new LvcColor(20, 20, 20);
+        var a = color.A / 255f;
+        var inv = 1f - a;
+        return new LvcColor(
+            (byte)(bg.R * inv + color.R * a),
+            (byte)(bg.G * inv + color.G * a),
+            (byte)(bg.B * inv + color.B * a));
     }
 
     public void DrawLine(int x0, int y0, int x1, int y1, LvcColor color)
