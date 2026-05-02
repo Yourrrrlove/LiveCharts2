@@ -27,9 +27,28 @@ public class ConsoleDrawingContext(CoreMotionCanvas motionCanvas, ConsoleSurface
 
     internal override void OnEndDraw() { }
 
-    internal override void OnBeginZone(CanvasZone zone) { }
+    internal override void OnBeginZone(CanvasZone zone)
+    {
+        // Each zone carries a Clip rect. CanvasZone.NoClip uses LvcRectangle.Empty
+        // (Width = Height = 0) which means "no clip"; CanvasZone.DrawMargin / XCrosshair /
+        // YCrosshair carry the chart's draw-margin sub-rectangles. Translate the rect into a
+        // surface-level clip so out-of-margin pixels (axis tail-end labels, series points
+        // beyond the plot area) are rejected at SetPixel and don't bleed past the axes.
+        var clip = zone.Clip;
+        if (clip.Width <= 0 || clip.Height <= 0)
+        {
+            Surface.ResetClip();
+        }
+        else
+        {
+            Surface.SetClip((int)clip.X, (int)clip.Y, (int)clip.Width, (int)clip.Height);
+        }
+    }
 
-    internal override void OnEndZone(CanvasZone zone) { }
+    internal override void OnEndZone(CanvasZone zone) =>
+        // Reset on every end so anything that draws between zones (or after the last zone)
+        // inherits the full-surface clip rather than carrying a stale one.
+        Surface.ResetClip();
 
     internal override void Draw(IDrawnElement drawable)
     {

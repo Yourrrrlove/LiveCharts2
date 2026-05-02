@@ -37,6 +37,14 @@ public sealed class ConsoleSurface
     private readonly LvcColor[,]? _pixels;
     private readonly GlyphCell[,] _glyphs;
 
+    // Active clip rect in pixel coords. SetPixel rejects writes outside this range, which is
+    // how we honor LiveChartsCore's CanvasZone.DrawMargin / XCrosshair / YCrosshair zones —
+    // ConsoleDrawingContext.OnBeginZone calls SetClip; OnEndZone calls ResetClip.
+    private int _clipX0;
+    private int _clipY0;
+    private int _clipX1;
+    private int _clipY1;
+
     public ConsoleRenderMode Mode { get; }
     public int Width { get; }
     public int Height { get; }
@@ -71,6 +79,37 @@ public sealed class ConsoleSurface
             _pixels = new LvcColor[Height, Width];
 
         _glyphs = new GlyphCell[CellRows, CellCols];
+
+        // Default clip = the whole surface. Drawing operations that don't enter a zone get
+        // their existing "draw anywhere" behavior, so unclipped paths (e.g. axis labels with
+        // CanvasZone.NoClip) still work without any per-call setup.
+        _clipX1 = Width;
+        _clipY1 = Height;
+    }
+
+    /// <summary>
+    /// Restricts subsequent <see cref="SetPixel"/> calls to the given pixel rect (intersected
+    /// with the surface bounds). Out-of-clip writes are silently dropped.
+    /// </summary>
+    public void SetClip(int x, int y, int w, int h)
+    {
+        _clipX0 = Math.Max(0, x);
+        _clipY0 = Math.Max(0, y);
+        _clipX1 = Math.Min(Width, x + w);
+        _clipY1 = Math.Min(Height, y + h);
+        if (_clipX1 < _clipX0) _clipX1 = _clipX0;
+        if (_clipY1 < _clipY0) _clipY1 = _clipY0;
+    }
+
+    /// <summary>
+    /// Clears the clip back to the full surface — undoes a prior <see cref="SetClip"/>.
+    /// </summary>
+    public void ResetClip()
+    {
+        _clipX0 = 0;
+        _clipY0 = 0;
+        _clipX1 = Width;
+        _clipY1 = Height;
     }
 
     public void Clear()
@@ -80,11 +119,19 @@ public sealed class ConsoleSurface
         if (_hb is not null) Array.Clear(_hb, 0, _hb.Length);
         if (_pixels is not null) Array.Clear(_pixels, 0, _pixels.Length);
         Array.Clear(_glyphs, 0, _glyphs.Length);
+
+        // A stale clip from a prior frame would silently drop draws the new frame asks for —
+        // OnBeginZone will set it again immediately, but reset here so any draw between Clear
+        // and the first zone enters with a sane "anywhere on the surface" clip.
+        ResetClip();
     }
 
     public void SetPixel(int x, int y, LvcColor color)
     {
-        if (x < 0 || y < 0 || x >= Width || y >= Height) return;
+        // Clip + bounds check in one — _clipX0/Y0/X1/Y1 default to the full surface, so this
+        // gives the same behavior as the old explicit (x < 0 || x >= Width) test when no clip
+        // is active, and tighter rejection when CanvasZone.DrawMargin is in effect.
+        if (x < _clipX0 || y < _clipY0 || x >= _clipX1 || y >= _clipY1) return;
 
         if (_pixels is not null)
         {
