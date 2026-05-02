@@ -162,6 +162,7 @@ public abstract class InMemoryConsoleChart
 
             coreChart.Measure();
             coreChart.Canvas.DrawFrame(new ConsoleDrawingContext(CoreCanvas, surface, Background));
+            RenderTooltipOverlay(surface);
 
             coreChart.Unload();
             _surface = null; // unload disposes paint state, force a fresh surface next call.
@@ -190,6 +191,7 @@ public abstract class InMemoryConsoleChart
 
             coreChart.Measure();
             coreChart.Canvas.DrawFrame(new ConsoleDrawingContext(CoreCanvas, surface, Background));
+            RenderTooltipOverlay(surface);
 
             return surface.ToAnsi(home);
         }
@@ -240,6 +242,40 @@ public abstract class InMemoryConsoleChart
     /// </summary>
     public void Print(bool home = false) =>
         System.Console.Out.Write(Render(home));
+
+    /// <summary>
+    /// Simulates a pointer-move event at the given pixel coordinates on the surface — drives
+    /// the chart engine's hover detection, which in turn calls <c>Tooltip.Show</c> with the
+    /// nearest data points. Public wrapper around <c>Chart.InvokePointerMove</c>, which is
+    /// protected internal in LiveChartsCore. Use this to script tooltip behavior (e.g., scan
+    /// across the chart over time) before real keyboard input is wired up.
+    /// </summary>
+    public void SimulatePointerMove(int xPixels, int yPixels)
+    {
+        var core = GetCoreChart();
+        if (core is null) return;
+        core.InvokePointerMove(new LvcPoint(xPixels, yPixels));
+    }
+
+    /// <summary>
+    /// Simulates the pointer leaving the chart — fires <c>Tooltip.Hide</c> via the engine.
+    /// </summary>
+    public void SimulatePointerLeft()
+    {
+        var core = GetCoreChart();
+        if (core is null) return;
+        core.InvokePointerLeft();
+    }
+
+    private void RenderTooltipOverlay(ConsoleSurface surface)
+    {
+        // GetCoreChart returns the chart engine, whose Tooltip is set from the theme factory
+        // (HasDefaultTooltip → ConsoleTooltip) or whatever the view assigned. We only know
+        // how to render the console flavor; anything else is a noop.
+        var core = GetCoreChart();
+        if (core?.Tooltip is ConsoleTooltip tooltip)
+            tooltip.Render(surface);
+    }
 
     private void EnsureBackgroundResolved()
     {

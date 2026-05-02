@@ -151,6 +151,26 @@ System.Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
+// --tooltip simulates a pointer scanning left-to-right across the chart so tooltips fire
+// without real input. Real keyboard-driven hover comes later (interactivity step); this is
+// just the demo trigger. Sweep period is 4s so each point gets a noticeable highlight.
+if (args.Contains("--tooltip"))
+{
+    var tooltipStart = DateTime.UtcNow;
+    _ = Task.Run(async () =>
+    {
+        while (!cts.IsCancellationRequested)
+        {
+            try { await Task.Delay(50, cts.Token); }
+            catch (OperationCanceledException) { return; }
+
+            var elapsed = (DateTime.UtcNow - tooltipStart).TotalSeconds;
+            var phase = elapsed / 4 % 1.0;
+            chart.SimulatePointerMove((int)(phase * chart.Width), chart.Height / 2);
+        }
+    });
+}
+
 // Data driver — bumps the shared offset by a small step every 250ms. The chart's animation
 // system tweens between snapshots so the visual is smooth at the render FPS.
 _ = Task.Run(async () =>

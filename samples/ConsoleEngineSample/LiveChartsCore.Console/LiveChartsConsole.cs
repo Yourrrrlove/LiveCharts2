@@ -37,7 +37,7 @@ public static class LiveChartsConsole
                     theme.Colors = ColorPalletes.MaterialDesign500;
                     theme.VirtualBackroundColor = new(0, 0, 0);
                 })
-                .HasDefaultTooltip(() => new ConsoleNoopTooltip())
+                .HasDefaultTooltip(() => new ConsoleTooltip())
                 .HasDefaultLegend(() => new ConsoleNoopLegend())
                 .HasRuleForAxes(axis =>
                 {
@@ -150,12 +150,6 @@ public static class LiveChartsConsole
                     polar.GeometryStroke = null;
                     polar.GeometryFill = null;
                 }));
-}
-
-internal class ConsoleNoopTooltip : IChartTooltip
-{
-    public void Show(IEnumerable<ChartPoint> foundPoints, Chart chart) { }
-    public void Hide(Chart chart) { }
 }
 
 internal class ConsoleNoopLegend : IChartLegend
