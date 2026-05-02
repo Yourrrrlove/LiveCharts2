@@ -400,12 +400,12 @@ public abstract class InMemoryConsoleChart
 
     private void RenderTooltipOverlay(ConsoleSurface surface)
     {
-        // GetCoreChart returns the chart engine, whose Tooltip is set from the theme factory
-        // (HasDefaultTooltip → ConsoleTooltip) or whatever the view assigned. We only know
-        // how to render the console flavor; anything else is a noop.
+        // GetCoreChart returns the chart engine, whose Tooltip / Legend are set from the
+        // theme factories or whatever the view assigned. We only know how to render the
+        // console flavors; anything else is a noop.
         var core = GetCoreChart();
-        if (core?.Tooltip is ConsoleTooltip tooltip)
-            tooltip.Render(surface);
+        if (core?.Legend is ConsoleLegend legend) legend.Render(surface);
+        if (core?.Tooltip is ConsoleTooltip tooltip) tooltip.Render(surface);
 
         RenderSelectedPointsMarker(surface);
     }

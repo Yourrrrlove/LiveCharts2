@@ -93,6 +93,9 @@ if (kind == "grid")
 // PieChart, PolarChart, and CartesianChart all share the same InMemoryConsoleChart base —
 // they expose the same RenderMode / SixelCellWidth / Render / RenderLoop surface — so we
 // keep the rest of the program polymorphic against that base after this branch.
+// All single-chart kinds get a bottom legend by default — handy for multi-series cases
+// (stacked, candlestick, box) and harmless for single-series (it's a one-entry strip).
+// Heat skips it since one categorical-data series adds no signal.
 InMemoryConsoleChart chart = kind switch
 {
     "pie" => new PieChart
@@ -101,6 +104,7 @@ InMemoryConsoleChart chart = kind switch
         Series = pieData
             .Select((pv, i) => (ISeries)new PieSeries<ObservableValue>(pv) { Name = $"S{i}" })
             .ToArray(),
+        LegendPosition = LegendPosition.Bottom,
     },
     "polar" => new PolarChart
     {
@@ -108,6 +112,7 @@ InMemoryConsoleChart chart = kind switch
         Series = [
             new PolarLineSeries<double>(lineData) { Name = "Signal", GeometrySize = 0, LineSmoothness = 0.65 }
         ],
+        LegendPosition = LegendPosition.Bottom,
     },
     "heat" => new CartesianChart
     {
@@ -124,6 +129,7 @@ InMemoryConsoleChart chart = kind switch
     {
         RenderMode = mode,
         Series = SelectSeries(args),
+        LegendPosition = LegendPosition.Bottom,
         // Default ZoomMode = None means mouse wheel and click-drag are no-ops. Enable
         // both axes here so cartesian samples are pannable / zoomable out of the box.
         ZoomMode = ZoomAndPanMode.X | ZoomAndPanMode.Y,

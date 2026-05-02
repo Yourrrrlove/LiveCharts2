@@ -39,7 +39,7 @@ public static class LiveChartsConsole
                     theme.VirtualBackroundColor = new(0, 0, 0);
                 })
                 .HasDefaultTooltip(() => new ConsoleTooltip())
-                .HasDefaultLegend(() => new ConsoleNoopLegend())
+                .HasDefaultLegend(() => new ConsoleLegend())
                 .HasRuleForAxes(axis =>
                 {
                     // TextSize is informational here — the axis layout reserves space using the
@@ -163,9 +163,3 @@ public static class LiveChartsConsole
                 }));
 }
 
-internal class ConsoleNoopLegend : IChartLegend
-{
-    public void Draw(Chart chart) { }
-    public void Hide(Chart chart) { }
-    public LvcSize Measure(Chart chart) => new(0, 0);
-}
