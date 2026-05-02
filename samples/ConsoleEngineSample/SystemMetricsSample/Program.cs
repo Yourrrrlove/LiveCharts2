@@ -50,18 +50,21 @@ const int HistoryLen = 60;   // 1 sample/sec → 1 minute of history
 const int TopN = 10;
 const int SampleIntervalMs = 1000;
 
-// One ObservableValue per slot so the chart can tween Value smoothly between samples.
-// Shifting in place (data[i].Value = data[i+1].Value) keeps the same entity instances and
-// avoids the Replace-event tween restart we'd get from reassigning the collection items.
-var cpuData       = MakeHistorySeries(HistoryLen);
-var memData       = MakeHistorySeries(HistoryLen);
-var procCountData = MakeHistorySeries(HistoryLen);
+// Time-series collections start empty and fill as samples roll in. Each tick we Add a new
+// point at the end and RemoveAt(0) once we hit HistoryLen — the chart engine sees the
+// surviving points' X indices decrement and animates them sliding left (true scroll), and
+// the new point fades in at the right. Shifting in place (mutating .Value at fixed indices)
+// would keep X stable but bounce Y between neighbors, which read as a vertical jitter.
+//
+// The top-N chart is different: the columns are categorical (top by mem) and the entity at
+// each rank changes on every sample, so we keep that one as fixed-size with in-place
+// mutation. Slot 0 always represents "current #1 by memory", regardless of which process.
+var cpuData = new ObservableCollection<ObservableValue>();
+var memData = new ObservableCollection<ObservableValue>();
+var procCountData = new ObservableCollection<ObservableValue>();
 var topProcMemData = new ObservableCollection<ObservableValue>(
     Enumerable.Range(0, TopN).Select(_ => new ObservableValue(0)));
 var topProcNames = new List<string>(Enumerable.Repeat("—", TopN));
-
-static ObservableCollection<ObservableValue> MakeHistorySeries(int n) =>
-    new(Enumerable.Range(0, n).Select(_ => new ObservableValue(0)));
 
 var halfCols = Math.Max(20, (cols - 2) / 2);
 var halfRows = Math.Max(6, (rows - 2) / 2);
@@ -289,11 +292,12 @@ void SampleMetrics()
 
 static void Shift(ObservableCollection<ObservableValue> data, double newValue)
 {
-    // Drop the oldest sample (index 0), shift everything left by one slot, append the new
-    // value at the end. We mutate the existing ObservableValue instances rather than
-    // adding/removing collection items so the chart's per-point tweens carry through.
-    for (var i = 0; i < data.Count - 1; i++) data[i].Value = data[i + 1].Value;
-    data[^1].Value = newValue;
+    // Add new point at the end; if we've reached the history cap, drop the oldest. The
+    // chart engine sees existing entities' X indices decrement and animates them sliding
+    // left, which reads as a smooth horizontal scroll. The new point fades in at the
+    // right edge.
+    if (data.Count >= HistoryLen) data.RemoveAt(0);
+    data.Add(new ObservableValue(newValue));
 }
 
 static int? ParseIntFlag(string[] argv, string flag)
