@@ -466,13 +466,7 @@ async Task RunGridAsync()
         YAxes = [new Axis { Labels = HeatYLabels }],
     });
 
-    var quadrants = new (InMemoryConsoleChart chart, int row, int col)[]
-    {
-        (lineChart,    1,             1),
-        (columnChart,  1,             halfCols + 2),
-        (scatterChart, halfRows + 2,  1),
-        (heatChart,    halfRows + 2,  halfCols + 2),
-    };
+    var charts = new[] { lineChart, columnChart, scatterChart, heatChart };
 
     using var gridCts = new CancellationTokenSource();
     System.Console.CancelKeyPress += (_, e) =>
@@ -489,11 +483,44 @@ async Task RunGridAsync()
     var dataInterval = TimeSpan.FromMilliseconds(200);
     var nextDataTick = DateTime.UtcNow + dataInterval;
 
+    var lastCols = cols;
+    var lastRows = rows;
+
     try
     {
         var sb = new StringBuilder();
         while (!gridCts.IsCancellationRequested)
         {
+            // Resize detection: re-read terminal size each frame and reconfigure the four
+            // charts when it changes. The screen-clear is necessary because shrinking the
+            // window leaves the previous frame's larger Sixel/cell content in cells that
+            // the new (smaller) quadrants no longer touch.
+            var resized = false;
+            if (!System.Console.IsOutputRedirected)
+            {
+                int newCols, newRows;
+                try
+                {
+                    newCols = Math.Max(40, System.Console.WindowWidth - 1);
+                    newRows = Math.Max(10, System.Console.WindowHeight - 2);
+                }
+                catch (System.IO.IOException)
+                {
+                    newCols = lastCols;
+                    newRows = lastRows;
+                }
+
+                if (newCols != lastCols || newRows != lastRows)
+                {
+                    lastCols = newCols;
+                    lastRows = newRows;
+                    halfCols = Math.Max(20, (newCols - 2) / 2);
+                    halfRows = Math.Max(6, (newRows - 2) / 2);
+                    foreach (var c in charts) c.ConfigureFromTerminalCells(halfCols, halfRows);
+                    resized = true;
+                }
+            }
+
             // Tick data inline (single-threaded loop — no SyncRoot dance needed since the
             // mutation and the per-chart Measure happen sequentially on the same thread).
             if (DateTime.UtcNow >= nextDataTick)
@@ -507,8 +534,16 @@ async Task RunGridAsync()
             }
 
             sb.Clear();
-            foreach (var (chart, row, col) in quadrants)
-                EmitChartAt(sb, chart, row, col);
+            // Reset SGR before clearing so the cleared cells inherit the terminal default,
+            // not a stray fg/bg from earlier output (PSReadLine prompts, our own SGR state).
+            if (resized) _ = sb.Append("\x1b[0m\x1b[2J");
+
+            // Quadrant positions are recomputed each frame from the current halfCols /
+            // halfRows so a resize takes effect immediately.
+            EmitChartAt(sb, lineChart,    1,             1);
+            EmitChartAt(sb, columnChart,  1,             halfCols + 2);
+            EmitChartAt(sb, scatterChart, halfRows + 2,  1);
+            EmitChartAt(sb, heatChart,    halfRows + 2,  halfCols + 2);
 
             await System.Console.Out.WriteAsync(sb);
             await System.Console.Out.FlushAsync(gridCts.Token);
