@@ -9,13 +9,14 @@ using LiveChartsCore.Defaults;
 using LiveChartsCore.Kernel.Sketches;
 
 // ----------------------------------------------------------------------------
-// Renders a single chart in the terminal. Pick which series kind to render
-// with --line / --column / --row / --scatter / --step / --stackedcolumn /
+// Renders a chart in the terminal. Pick which series kind to render with
+// --line / --column / --row / --scatter / --step / --stackedcolumn /
 // --stackedrow / --stackedarea / --stackedsteparea / --candlestick / --box /
-// --heat / --pie / --polar. Pick render mode with --halfblock / --braille /
-// --sixel — default is auto-detect (Sixel if the terminal advertises it
-// via DA1, otherwise Braille; HalfBlock stays opt-in). Cartesian kinds use
-// a CartesianChart; --pie uses a PieChart; --polar uses a PolarChart.
+// --heat / --pie / --polar — or pass --grid for a live 2x2 layout showing
+// four charts side-by-side. Pick render mode with --halfblock / --braille /
+// --sixel — default is auto-detect (Sixel if the terminal advertises it via
+// DA1, otherwise Braille; HalfBlock stays opt-in). Cartesian kinds use a
+// CartesianChart; --pie uses a PieChart; --polar uses a PolarChart.
 //
 // Data is sampled from EasingFunctions.BounceInOut shifted by a shared offset
 // that advances every tick — produces a clean wave that scrolls across the
@@ -81,6 +82,12 @@ var pieData = new ObservableValue[PieSlices];
 for (var i = 0; i < PieSlices; i++) pieData[i] = new ObservableValue(SamplePieValue(i, sharedOffset));
 
 var kind = SelectedKind(args);
+
+if (kind == "grid")
+{
+    await RunGridAsync();
+    return;
+}
 
 // PieChart, PolarChart, and CartesianChart all share the same InMemoryConsoleChart base —
 // they expose the same RenderMode / SixelCellWidth / Render / RenderLoop surface — so we
@@ -231,6 +238,7 @@ static string SelectedKind(string[] argv)
     if (argv.Contains("--heat")) return "heat";
     if (argv.Contains("--pie")) return "pie";
     if (argv.Contains("--polar")) return "polar";
+    if (argv.Contains("--grid")) return "grid";
     return "line";
 }
 
@@ -417,6 +425,125 @@ static double HeatWeight(int xi, int yi, int cols, int rows, double offset)
     var w = 0.6 * Math.Sin(2 * Math.PI * x - t) * Math.Cos(2 * Math.PI * y - t * 0.5)
           + 0.4 * Math.Sin(2 * Math.PI * 1.5 * x + 2 * Math.PI * y - t * 0.7);
     return (w + 1) * 0.5; // map to roughly [0, 1]
+}
+
+async Task RunGridAsync()
+{
+    // Quadrant size: half the terminal in each axis, with a 1-cell gutter between charts so
+    // their borders don't run together. Floor at minimums so a tiny window doesn't produce
+    // a degenerate Sixel image.
+    var halfCols = Math.Max(20, (cols - 2) / 2);
+    var halfRows = Math.Max(6, (rows - 2) / 2);
+
+    InMemoryConsoleChart Configure(InMemoryConsoleChart c)
+    {
+        if (sixelCw.HasValue) c.SixelCellWidth = sixelCw.Value;
+        if (sixelCh.HasValue) c.SixelCellHeight = sixelCh.Value;
+        c.ConfigureFromTerminalCells(halfCols, halfRows);
+        return c;
+    }
+
+    var lineChart = (CartesianChart)Configure(new CartesianChart
+    {
+        RenderMode = mode,
+        Series = [new LineSeries<double>(lineData) { Name = "Line", GeometrySize = 0, LineSmoothness = 0.65 }],
+    });
+    var columnChart = (CartesianChart)Configure(new CartesianChart
+    {
+        RenderMode = mode,
+        Series = [new ColumnSeries<double>(barData) { Name = "Bars" }],
+    });
+    var scatterChart = (CartesianChart)Configure(new CartesianChart
+    {
+        RenderMode = mode,
+        Series = [new ScatterSeries<ObservablePoint>(scatterData) { Name = "Scatter", GeometrySize = 8 }],
+    });
+    var heatChart = (CartesianChart)Configure(new CartesianChart
+    {
+        RenderMode = mode,
+        Series = [new HeatSeries<WeightedPoint>(heatData) { Name = "Heat" }],
+        XAxes = [new Axis { Labels = HeatXLabels }],
+        YAxes = [new Axis { Labels = HeatYLabels }],
+    });
+
+    var quadrants = new (InMemoryConsoleChart chart, int row, int col)[]
+    {
+        (lineChart,    1,             1),
+        (columnChart,  1,             halfCols + 2),
+        (scatterChart, halfRows + 2,  1),
+        (heatChart,    halfRows + 2,  halfCols + 2),
+    };
+
+    using var gridCts = new CancellationTokenSource();
+    System.Console.CancelKeyPress += (_, e) =>
+    {
+        if (gridCts.IsCancellationRequested) return;
+        e.Cancel = true;
+        gridCts.Cancel();
+    };
+
+    await System.Console.Out.WriteAsync("\x1b[0m\x1b[?25l\x1b[2J");
+    await System.Console.Out.FlushAsync();
+
+    var period = TimeSpan.FromMilliseconds(1000.0 / 30);
+    var dataInterval = TimeSpan.FromMilliseconds(200);
+    var nextDataTick = DateTime.UtcNow + dataInterval;
+
+    try
+    {
+        var sb = new StringBuilder();
+        while (!gridCts.IsCancellationRequested)
+        {
+            // Tick data inline (single-threaded loop — no SyncRoot dance needed since the
+            // mutation and the per-chart Measure happen sequentially on the same thread).
+            if (DateTime.UtcNow >= nextDataTick)
+            {
+                sharedOffset += 0.025;
+                ApplyBounce(lineData, PhaseLine, sharedOffset, signed: true);
+                ApplyBounce(barData, PhaseBars, sharedOffset, signed: true);
+                ApplyScatter(scatterData, sharedOffset);
+                ApplyHeat(heatData, HeatCols, HeatRows, sharedOffset);
+                nextDataTick = DateTime.UtcNow + dataInterval;
+            }
+
+            sb.Clear();
+            foreach (var (chart, row, col) in quadrants)
+                EmitChartAt(sb, chart, row, col);
+
+            await System.Console.Out.WriteAsync(sb);
+            await System.Console.Out.FlushAsync(gridCts.Token);
+
+            try { await Task.Delay(period, gridCts.Token); }
+            catch (OperationCanceledException) { break; }
+        }
+    }
+    finally
+    {
+        await System.Console.Out.WriteAsync("\x1b[0m\x1b[?25h\n");
+        await System.Console.Out.FlushAsync(CancellationToken.None);
+    }
+}
+
+static void EmitChartAt(StringBuilder sb, InMemoryConsoleChart chart, int row, int col)
+{
+    var rendered = chart.RenderFrame(home: false);
+
+    if (chart.RenderMode == ConsoleRenderMode.Sixel)
+    {
+        // Sixel renders at the current cursor position — one absolute move and we're done.
+        _ = sb.Append("\x1b[").Append(row).Append(';').Append(col).Append('H').Append(rendered);
+    }
+    else
+    {
+        // Cell-grid output uses '\n' between rows, which moves to column 0 of the next line.
+        // For a quadrant-positioned chart we need each row to land at the chart's left edge,
+        // not the terminal's, so reposition before each line.
+        var lines = rendered.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            _ = sb.Append("\x1b[").Append(row + i).Append(';').Append(col).Append('H').Append(lines[i]);
+        }
+    }
 }
 
 static int? ParseIntFlag(string[] argv, string flag)
