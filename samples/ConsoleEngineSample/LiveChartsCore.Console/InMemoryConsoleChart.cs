@@ -406,6 +406,42 @@ public abstract class InMemoryConsoleChart
         var core = GetCoreChart();
         if (core?.Tooltip is ConsoleTooltip tooltip)
             tooltip.Render(surface);
+
+        RenderSelectedPointsMarker(surface);
+    }
+
+    /// <summary>
+    /// Selected points captured from the chart's DataPointerDown event (wired in the
+    /// SourceGenChart bridge). Rendered as a small marker on top of the chart so the user
+    /// can see which point they clicked even after the pointer moves elsewhere.
+    /// </summary>
+    private List<Kernel.ChartPoint>? _selectedPoints;
+
+    internal void SetSelectedPoints(IEnumerable<Kernel.ChartPoint>? points)
+    {
+        _selectedPoints = points is null ? null : [.. points];
+    }
+
+    private void RenderSelectedPointsMarker(ConsoleSurface surface)
+    {
+        var pts = _selectedPoints;
+        if (pts is null || pts.Count == 0) return;
+
+        // Bright accent so the marker reads against any background. The cross shape is
+        // cheap (8 SetPixel calls) and stays visible at every render mode without depending
+        // on the bitmap font.
+        var accent = new LvcColor(255, 200, 50);
+        foreach (var point in pts)
+        {
+            if (point.Context.Visual is not BoundedDrawnGeometry visual) continue;
+            var cx = (int)(visual.X + visual.Width / 2);
+            var cy = (int)(visual.Y + visual.Height / 2);
+            for (var d = -3; d <= 3; d++)
+            {
+                surface.SetPixel(cx + d, cy, accent);
+                surface.SetPixel(cx, cy + d, accent);
+            }
+        }
     }
 
     /// <summary>

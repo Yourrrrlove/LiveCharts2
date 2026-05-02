@@ -22,6 +22,11 @@ public abstract partial class SourceGenChart : InMemoryConsoleChart, IDrawnView
 
         StartObserving();
         CoreChart?.Load();
+
+        // Wire click-to-select: the engine fires DataPointerDown with the hit chart points
+        // (or an empty enumerable if the click missed all points). Stash them on the base
+        // so RenderSelectedPointsMarker can draw the accent on top of the chart pixels.
+        DataPointerDown += (_, points) => SetSelectedPoints(points);
     }
 
     bool IChartView.DesignerMode => false;
