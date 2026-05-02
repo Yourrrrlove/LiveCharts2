@@ -24,6 +24,10 @@ public abstract class InMemoryConsoleChart
     private LvcColor _background = default; // A=0 → "transparent / not set" sentinel.
     private bool _backgroundExplicit;
     private bool _backgroundDetected;
+    private bool _sixelCellSizeExplicit;
+    private bool _sixelCellSizeDetected;
+    private int _sixelCellWidth = 10;
+    private int _sixelCellHeight = 22;
 
     public CoreMotionCanvas CoreCanvas { get; } = new();
 
@@ -77,13 +81,24 @@ public abstract class InMemoryConsoleChart
     }
 
     /// <summary>
-    /// Pixels per terminal cell when in <see cref="ConsoleRenderMode.Sixel"/>. Defaults are tuned
-    /// for VSCode's default monospace at default zoom; bump them if your terminal uses a larger
-    /// font (axis labels at the bottom of the chart will land in white space below the image
-    /// when these are too small) or shrink them if labels overlap the chart contents.
+    /// Pixels per terminal cell when in <see cref="ConsoleRenderMode.Sixel"/>. If unset, the
+    /// chart queries the terminal at first render via <c>\x1b[16t</c> and uses its reported
+    /// cell pixel size — this aligns the image to cell boundaries and prevents the empty
+    /// strip that otherwise appears below the chart when the assumed and actual cell heights
+    /// differ. If detection fails (e.g., the terminal doesn't support the report), the
+    /// defaults below are used. Setting either value explicitly opts out of detection.
     /// </summary>
-    public int SixelCellWidth { get; set; } = 10;
-    public int SixelCellHeight { get; set; } = 22;
+    public int SixelCellWidth
+    {
+        get => _sixelCellWidth;
+        set { _sixelCellWidth = value; _sixelCellSizeExplicit = true; }
+    }
+
+    public int SixelCellHeight
+    {
+        get => _sixelCellHeight;
+        set { _sixelCellHeight = value; _sixelCellSizeExplicit = true; }
+    }
 
     /// <summary>
     /// Sizes <see cref="Width"/> and <see cref="Height"/> so the chart fills the given number of
@@ -91,6 +106,11 @@ public abstract class InMemoryConsoleChart
     /// </summary>
     public void ConfigureFromTerminalCells(int cellCols, int cellRows)
     {
+        // Resolve cell size BEFORE deriving Width/Height — otherwise we'd size the surface
+        // using the assumed defaults, then detect a different real cell size on first
+        // render, and end up with a misaligned image until the next configure.
+        EnsureSixelCellSizeResolved();
+
         var (cw, ch) = CellPixelSize();
         Width = Math.Max(cw, cellCols * cw);
         Height = Math.Max(ch, cellRows * ch);
@@ -134,6 +154,7 @@ public abstract class InMemoryConsoleChart
         lock (SyncRoot)
         {
             EnsureBackgroundResolved();
+            EnsureSixelCellSizeResolved();
             var surface = AcquireSurface();
 
             coreChart.Canvas.DisableAnimations = true;
@@ -161,6 +182,7 @@ public abstract class InMemoryConsoleChart
         lock (SyncRoot)
         {
             EnsureBackgroundResolved();
+            EnsureSixelCellSizeResolved();
             var surface = AcquireSurface();
 
             // Idempotent — Load is invoked once in the constructor; this just guards re-entry.
@@ -186,7 +208,11 @@ public abstract class InMemoryConsoleChart
         output ??= System.Console.Out;
         var period = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, fps));
 
-        await output.WriteAsync("\x1b[?25l\x1b[2J"); // hide cursor + clear screen
+        // \x1b[0m up-front: \x1b[2J erases the screen using the *currently active* SGR
+        // background — if PowerShell's prompt or any prior output left a non-default bg
+        // selected, the cleared screen would inherit it. Reset SGR first so the clear
+        // uses the terminal's actual default background.
+        await output.WriteAsync("\x1b[0m\x1b[?25l\x1b[2J");
 
         try
         {
@@ -230,6 +256,22 @@ public abstract class InMemoryConsoleChart
             var c = detected.Value;
             _background = new LvcColor(c.R, c.G, c.B); // force opaque so the encoder paints it.
         }
+    }
+
+    private void EnsureSixelCellSizeResolved()
+    {
+        // Only meaningful in Sixel mode; cell-grid modes use fixed sub-pixel ratios.
+        if (_mode != ConsoleRenderMode.Sixel) return;
+        if (_sixelCellSizeExplicit || _sixelCellSizeDetected) return;
+        _sixelCellSizeDetected = true;
+
+        var detected = ConsoleTerminal.TryDetectCellPixelSize();
+        if (!detected.HasValue) return;
+
+        // Set fields directly — the property setters would mark the values as "explicit"
+        // and disable redetection if the user later switches modes.
+        _sixelCellWidth = detected.Value.width;
+        _sixelCellHeight = detected.Value.height;
     }
 
     private ConsoleSurface AcquireSurface()

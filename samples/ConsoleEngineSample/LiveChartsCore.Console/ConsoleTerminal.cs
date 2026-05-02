@@ -69,6 +69,59 @@ public static class ConsoleTerminal
         }
     }
 
+    /// <summary>
+    /// Queries the terminal for its character cell size in pixels via the DECRQSS-style
+    /// <c>\x1b[16t</c> sequence. Response shape: <c>\x1b[6;height;widtht</c>. Returns null
+    /// if the terminal doesn't respond within <paramref name="timeoutMs"/>, doesn't support
+    /// the report, or stdin is redirected. Knowing this lets the Sixel renderer size the
+    /// image so its height is an exact multiple of the cell pixel height — which means the
+    /// image lands on cell boundaries and there's no partial-cell strip below it.
+    /// </summary>
+    public static (int width, int height)? TryDetectCellPixelSize(int timeoutMs = 100)
+    {
+        if (System.Console.IsInputRedirected || System.Console.IsOutputRedirected)
+            return null;
+
+        try
+        {
+            System.Console.Out.Write("\x1b[16t");
+            System.Console.Out.Flush();
+
+            var collected = new System.Text.StringBuilder();
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+
+            while (DateTime.UtcNow < deadline)
+            {
+                if (System.Console.KeyAvailable)
+                {
+                    var key = System.Console.ReadKey(intercept: true);
+                    var ch = key.KeyChar;
+                    _ = collected.Append(ch);
+                    if (ch == 't') break;
+                }
+                else
+                {
+                    Thread.Sleep(5);
+                }
+            }
+
+            // Response: ESC [ 6 ; <h> ; <w> t. Some terminals omit the 6; prefix or use
+            // different leading codes — match permissively on the trailing two-number tuple.
+            var match = Regex.Match(collected.ToString(), @"\[6;(\d+);(\d+)t");
+            if (!match.Success) return null;
+
+            var h = int.Parse(match.Groups[1].Value);
+            var w = int.Parse(match.Groups[2].Value);
+            if (h <= 0 || w <= 0 || h > 200 || w > 200) return null; // sanity clamp.
+
+            return (w, h);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static byte ScaleHexComponent(string hex)
     {
         if (string.IsNullOrEmpty(hex)) return 0;

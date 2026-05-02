@@ -211,17 +211,23 @@ public sealed class ConsoleSurface
     private string EncodeSixel(bool home)
     {
         var sb = new StringBuilder(Width * Height / 3);
-        if (home) _ = sb.Append("\x1b[H");
+
+        // Reset SGR up-front so anything the terminal paints around the image (cells made
+        // hybrid by a non-aligned cell height, rows added by Sixel-induced scroll) inherits
+        // the terminal's *default* background, not whatever SGR happened to be active when
+        // we got here (e.g. PSReadLine's prompt color).
+        if (home) _ = sb.Append("\x1b[0m\x1b[H");
 
         // Labels are rasterized into the pixel grid by LabelGeometry, so this is a single
         // self-contained DCS block — no cell-text overlay pass needed.
         _ = sb.Append(SixelEncoder.Encode(_pixels!, Background));
 
-        // Reset SGR state but DON'T park the cursor with an absolute escape — when the
-        // terminal's real cell pixel height differs from SixelCellHeight, parking past the
-        // image's actual on-screen footprint causes the terminal to scroll, and the scroll
-        // fills the new row with the active SGR attribute (often a stray black). The live
-        // loop's exit path handles cursor restoration; per-frame parking just causes flicker.
+        // Reset SGR but DON'T erase below or park the cursor: after the DCS block the
+        // terminal places the cursor inside the cell row that contains the image's bottom
+        // edge (a partial cell), and any \x1b[J or absolute-row positioning issued from
+        // there clobbers that row — which usually contains the X-axis labels. Cell-size
+        // alignment (via terminal cell-pixel-size detection in InMemoryConsoleChart) is the
+        // right way to avoid the strip-below-image artifact; per-frame erasure isn't.
         _ = sb.Append("\x1b[0m");
         return sb.ToString();
     }

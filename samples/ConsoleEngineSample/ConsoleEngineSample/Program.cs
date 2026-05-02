@@ -68,10 +68,14 @@ ISeries[] series = SelectSeries(args);
 var chart = new CartesianChart
 {
     RenderMode = mode,
-    SixelCellWidth = sixelCw ?? 10,
-    SixelCellHeight = sixelCh ?? 22,
     Series = series
 };
+
+// Only set SixelCellWidth/Height when the user provided a CLI flag — otherwise leave them
+// alone so the chart can auto-detect the terminal's real cell pixel size at first render.
+// Setting either property (even to the same default) opts out of detection.
+if (sixelCw.HasValue) chart.SixelCellWidth = sixelCw.Value;
+if (sixelCh.HasValue) chart.SixelCellHeight = sixelCh.Value;
 
 chart.ConfigureFromTerminalCells(cols, rows);
 
