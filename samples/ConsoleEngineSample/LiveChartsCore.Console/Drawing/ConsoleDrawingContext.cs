@@ -65,15 +65,26 @@ public class ConsoleDrawingContext(CoreMotionCanvas motionCanvas, ConsoleSurface
         {
             if (ActiveLvcPaint.PaintStyle.HasFlag(PaintStyle.Fill))
             {
-                if (element.Fill is null) element.Draw(this);
+                if (element.Fill is null) DrawWithOpacity(element, opacity);
                 else DrawByPaint(element.Fill, element, opacity);
             }
             if (ActiveLvcPaint.PaintStyle.HasFlag(PaintStyle.Stroke))
             {
-                if (element.Stroke is null) element.Draw(this);
+                if (element.Stroke is null) DrawWithOpacity(element, opacity);
                 else DrawByPaint(element.Stroke, element, opacity);
             }
         }
+    }
+
+    private void DrawWithOpacity(IDrawnElement<ConsoleDrawingContext> element, float opacity)
+    {
+        // ActiveColor was set by an outer SelectPaint call (otherwise we'd be in the
+        // ActiveLvcPaint == null branch above). Modulate it by the geometry's opacity for
+        // the duration of this Draw, then restore.
+        var prevColor = ActiveColor;
+        ActiveColor = ApplyOpacity(prevColor, opacity);
+        element.Draw(this);
+        ActiveColor = prevColor;
     }
 
     internal override void SelectPaint(Paint paint)
@@ -98,8 +109,15 @@ public class ConsoleDrawingContext(CoreMotionCanvas motionCanvas, ConsoleSurface
         if (paint != MeasureTask.Instance)
         {
             ActiveLvcPaint = paint;
-            paint.OnPaintStarted(this, element);
+            paint.OnPaintStarted(this, element);  // sets ActiveColor from paint.Color
         }
+
+        // Apply geometry opacity AFTER OnPaintStarted (which clobbers ActiveColor with the
+        // paint's color). The chart engine sets ActiveOpacity (= geometry.Opacity) before
+        // calling Draw — for separators being disposed during a zoom animation the engine
+        // animates this from 1 down to 0, producing a fade-out instead of an abrupt
+        // disappearance. Surface.SetPixel sees alpha < 255 and blends against Background.
+        ActiveColor = ApplyOpacity(ActiveColor, opacity);
 
         element.Draw(this);
 
@@ -107,5 +125,12 @@ public class ConsoleDrawingContext(CoreMotionCanvas motionCanvas, ConsoleSurface
 
         ActiveColor = prevColor;
         ActiveLvcPaint = prevPaint;
+    }
+
+    private static LvcColor ApplyOpacity(LvcColor c, float opacity)
+    {
+        if (opacity >= 1f) return c;
+        if (opacity <= 0f) return new LvcColor(c.R, c.G, c.B, 0);
+        return new LvcColor(c.R, c.G, c.B, (byte)(c.A * opacity));
     }
 }
