@@ -50,8 +50,10 @@ catch (System.IO.IOException) { cols = 120; rows = 30; }
 const int Points = 32;          // line/step
 const int Bars = 16;            // column/row/stacked
 const int ScatterPoints = 24;
-const int HeatCols = 16;        // heat — X grid size
-const int HeatRows = 12;        // heat — Y grid size
+const int HeatCols = 7;         // heat — X grid size (one per day-of-week label)
+const int HeatRows = 12;        // heat — Y grid size (one per month label)
+string[] HeatXLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+string[] HeatYLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const int PieSlices = 6;        // pie — number of wedges
 const double PhaseLine = 0;
 const double PhaseBars = 0.15;
@@ -91,6 +93,15 @@ InMemoryConsoleChart chart = kind switch
         Series = [
             new PolarLineSeries<double>(lineData) { Name = "Signal", GeometrySize = 0, LineSmoothness = 0.65 }
         ],
+    },
+    "heat" => new CartesianChart
+    {
+        // Categorical labels demonstrate the BitmapFont glyph coverage in Sixel mode —
+        // months / days exercise both upper- and lower-case letters.
+        RenderMode = mode,
+        Series = SelectSeries(args),
+        XAxes = [new Axis { Labels = HeatXLabels }],
+        YAxes = [new Axis { Labels = HeatYLabels }],
     },
     _ => new CartesianChart
     {
