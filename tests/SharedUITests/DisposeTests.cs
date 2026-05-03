@@ -36,6 +36,12 @@ public class DisposeTests
         var weakRefs = new List<WeakReference>();
 
         const int Iterations = 5;
+        // The Test/Dispose sample's swapped-in page hosts a CartesianChart, PieChart,
+        // PolarChart, and GeoMap. The probe walks Grid.Children, so any future change to
+        // the sample layout (extra children, wrapper panel) will diverge from this number
+        // and fail the sanity check below — telling us the probe needs updating instead
+        // of silently dropping coverage of the leak we were trying to canary.
+        const int ChartsPerPage = 4;
         for (var i = 0; i < Iterations; i++)
         {
             // Add the weak refs in a non-async helper so the swapped-out chart references
@@ -57,12 +63,17 @@ public class DisposeTests
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
 
         var alive = weakRefs.Count(r => r.IsAlive);
+        var expected = Iterations * ChartsPerPage;
         Assert.True(
-            alive == 0 && weakRefs.Count >= Iterations,
-            $"{alive}/{weakRefs.Count} unloaded chart instances were still alive after GC. " +
-            "An unloaded chart must not be rooted by anything in the app. The likely cause is " +
-            "a `this`-capturing event subscription in the chart that is never detached, or a " +
-            "static collection / accumulator field that the chart was added to. See " +
+            alive == 0 && weakRefs.Count == expected,
+            $"{alive}/{weakRefs.Count} unloaded chart instances were still alive after GC " +
+            $"(expected {expected} tracked: {Iterations} swaps x {ChartsPerPage} charts/page). " +
+            "If the count differs, the visual-tree probe in the platform's ChangeContent() " +
+            "is no longer finding every chart and this canary has stopped covering part of " +
+            "the leak scenario — update GetCharts() / ChartsPerPage to match the sample. " +
+            "If alive > 0, an unloaded chart is rooted by something in the app — likely a " +
+            "`this`-capturing event subscription that is never detached, or a static " +
+            "collection / accumulator field. See " +
             "https://github.com/Live-Charts/LiveCharts2/issues/1725.");
     }
 
