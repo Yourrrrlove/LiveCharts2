@@ -13,8 +13,10 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>lvc</ToolCommandName>
     <PackageId>LiveChartsCore.Console.Cli</PackageId>
-    <Version>0.1.0</Version>
-    <Authors>LiveCharts Contributors</Authors>
+    <!-- Track the central LiveChartsVersion (Directory.Build.props), overridable by
+         the publish workflow via /p:LiveChartsVersion=<tag>. -->
+    <Version>$(LiveChartsVersion)</Version>
+    <Authors>$(LiveChartsAuthors)</Authors>
     <Description>
       Render LiveCharts charts in the terminal from a JSON spec.
       Supports HalfBlock, Braille, and Sixel rendering with auto-detection.
