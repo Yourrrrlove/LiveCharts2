@@ -34,6 +34,7 @@ using System.Windows.Input;
 #if AVALONIA_UI_TESTING
 using System.Reflection;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Threading;
 #endif
 
@@ -57,19 +58,14 @@ public class PointerCaptureLostTests
         await sut.Chart.WaitUntilChartRenders();
 
         var chart = (FrameworkElement)sut.Chart;
-        var view = (IChartView)sut.Chart;
+        var coreChart = ((IChartView)sut.Chart).CoreChart;
 
         var sourceGenChartType = WalkBaseTypes(chart.GetType(), "SourceGenChart");
         Assert.NotNull(sourceGenChartType);
-
         var isPointerDownField = sourceGenChartType!.GetField(
             "_isPointerDown", BindingFlags.Instance | BindingFlags.NonPublic);
-        var onLostCapture = sourceGenChartType.GetMethod(
-            "OnLostMouseCapture", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(isPointerDownField);
-        Assert.NotNull(onLostCapture);
 
-        var coreChart = view.CoreChart;
         var chartType = WalkBaseTypes(coreChart.GetType(), "Chart");
         Assert.NotNull(chartType);
         var isPanningField = chartType!.GetField(
@@ -78,25 +74,28 @@ public class PointerCaptureLostTests
 
         await chart.Dispatcher.InvokeAsync(() =>
         {
-            // Simulate the state right after a MouseDown on the chart: the WPF-side
-            // flag is set and the core chart is panning.
+            // Put the chart into the same state it would have right after a real
+            // MouseDown: the WPF-side flag tracking "user is pressing" is set, and
+            // the core chart's pan/drag state is armed.
             isPointerDownField!.SetValue(chart, true);
             isPanningField!.SetValue(coreChart, true);
 
-            // An ancestor steals capture (the #1576 ToggleButton scenario). No MouseUp
-            // will arrive at the chart; the LostMouseCapture handler must clean up.
-            var args = new MouseEventArgs(Mouse.PrimaryDevice, 0)
+            // Drive a real LostMouseCapture event through WPF's routed-event system.
+            // The chart's handler (subscribed via +=) is what we're testing — we don't
+            // reflect on it, so we cannot get a name-clash with UIElement's protected
+            // virtual of the same name.
+            chart.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0)
             {
-                RoutedEvent = Mouse.LostMouseCaptureEvent
-            };
-            _ = onLostCapture!.Invoke(chart, [chart, args]);
+                RoutedEvent = Mouse.LostMouseCaptureEvent,
+                Source = chart
+            });
 
             Assert.False(
                 (bool)isPointerDownField.GetValue(chart)!,
-                "_isPointerDown should be reset by OnLostMouseCapture");
+                "_isPointerDown should be reset after LostMouseCapture");
             Assert.False(
                 (bool)isPanningField.GetValue(coreChart)!,
-                "Chart._isPanning should be reset by OnLostMouseCapture");
+                "Chart._isPanning should be reset after LostMouseCapture");
         });
     }
 #endif
@@ -113,19 +112,25 @@ public class PointerCaptureLostTests
         await sut.Chart.WaitUntilChartRenders();
 
         var chart = (Control)sut.Chart;
-        var view = (IChartView)sut.Chart;
+        var coreChart = ((IChartView)sut.Chart).CoreChart;
 
         var sourceGenChartType = WalkBaseTypes(chart.GetType(), "SourceGenChart");
         Assert.NotNull(sourceGenChartType);
-
         var isPointerDownField = sourceGenChartType!.GetField(
             "_isPointerDown", BindingFlags.Instance | BindingFlags.NonPublic);
-        var onCaptureLost = sourceGenChartType.GetMethod(
-            "OnPointerCaptureLost", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(isPointerDownField);
+
+        // OnPointerCaptureLost shadows InputElement's protected virtual of the same
+        // name (single-arg signature), so we must specify the parameter types to
+        // disambiguate; the simple overload throws AmbiguousMatchException.
+        var onCaptureLost = sourceGenChartType.GetMethod(
+            "OnPointerCaptureLost",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            types: [typeof(object), typeof(PointerCaptureLostEventArgs)],
+            modifiers: null);
         Assert.NotNull(onCaptureLost);
 
-        var coreChart = view.CoreChart;
         var chartType = WalkBaseTypes(coreChart.GetType(), "Chart");
         Assert.NotNull(chartType);
         var isPanningField = chartType!.GetField(
@@ -137,16 +142,17 @@ public class PointerCaptureLostTests
             isPointerDownField!.SetValue(chart, true);
             isPanningField!.SetValue(coreChart, true);
 
-            // PointerCaptureLostEventArgs has no public constructor; pass null since
-            // OnPointerCaptureLost does not read its argument.
+            // PointerCaptureLostEventArgs has no public constructor and Avalonia's
+            // RaiseEvent path therefore can't be exercised from a test. Invoke the
+            // handler directly; it doesn't read its argument, so null is safe.
             _ = onCaptureLost!.Invoke(chart, [chart, null]);
 
             Assert.False(
                 (bool)isPointerDownField.GetValue(chart)!,
-                "_isPointerDown should be reset by OnPointerCaptureLost");
+                "_isPointerDown should be reset after PointerCaptureLost");
             Assert.False(
                 (bool)isPanningField.GetValue(coreChart)!,
-                "Chart._isPanning should be reset by OnPointerCaptureLost");
+                "Chart._isPanning should be reset after PointerCaptureLost");
         });
     }
 #endif
