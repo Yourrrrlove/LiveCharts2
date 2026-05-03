@@ -37,6 +37,8 @@ namespace LiveChartsCore.Native;
 internal partial class PointerController : INativePointerController
 {
     private bool _isPinching;
+    private bool _isPointerDown;
+    private LiveChartsCore.Drawing.LvcPoint _lastPointerPosition;
     private DateTime _pressedTime;
 
     public void InitializeController(object view)
@@ -46,6 +48,7 @@ internal partial class PointerController : INativePointerController
         winUIView.PointerPressed += OnUnoSkiaPointerPressed;
         winUIView.PointerMoved += OnUnoSkiaPointerMoved;
         winUIView.PointerReleased += OnUnoSkiaPointerReleased;
+        winUIView.PointerCaptureLost += OnUnoSkiaPointerCaptureLost;
         winUIView.PointerWheelChanged += OnUnoSkiaPointerWheelChanged;
         winUIView.PointerExited += OnUnoSkiaPointerExited;
 
@@ -62,6 +65,7 @@ internal partial class PointerController : INativePointerController
         winUIView.PointerPressed -= OnUnoSkiaPointerPressed;
         winUIView.PointerMoved -= OnUnoSkiaPointerMoved;
         winUIView.PointerReleased -= OnUnoSkiaPointerReleased;
+        winUIView.PointerCaptureLost -= OnUnoSkiaPointerCaptureLost;
         winUIView.PointerWheelChanged -= OnUnoSkiaPointerWheelChanged;
         winUIView.PointerExited -= OnUnoSkiaPointerExited;
 
@@ -81,9 +85,12 @@ internal partial class PointerController : INativePointerController
         _ = element.CapturePointer(e.Pointer);
 #endif
 
+        _isPointerDown = true;
+        _lastPointerPosition = new(p.Position.X, p.Position.Y);
+
         Pressed?.Invoke(
             sender,
-            new(new(p.Position.X, p.Position.Y), p.Properties.IsRightButtonPressed, e));
+            new(_lastPointerPosition, p.Properties.IsRightButtonPressed, e));
 
         _pressedTime = DateTime.Now;
     }
@@ -96,9 +103,11 @@ internal partial class PointerController : INativePointerController
         var p = e.GetCurrentPoint(sender as UIElement);
         if (p is null) return;
 
+        _lastPointerPosition = new(p.Position.X, p.Position.Y);
+
         Moved?.Invoke(
             sender,
-            new(new(p.Position.X, p.Position.Y), e));
+            new(_lastPointerPosition, e));
     }
 
     private void OnUnoSkiaPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -112,9 +121,24 @@ internal partial class PointerController : INativePointerController
         element.ReleasePointerCapture(element.PointerCaptures[0]);
 #endif
 
+        _isPointerDown = false;
+        _lastPointerPosition = new(p.Position.X, p.Position.Y);
+
         Released?.Invoke(
             sender,
-            new(new(p.Position.X, p.Position.Y), p.Properties.IsRightButtonPressed, e));
+            new(_lastPointerPosition, p.Properties.IsRightButtonPressed, e));
+    }
+
+    // See #1576: when an ancestor re-captures the pointer mid-gesture, the chart
+    // never receives PointerReleased. Treat capture loss as a synthetic release.
+    private void OnUnoSkiaPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isPointerDown) return;
+        _isPointerDown = false;
+
+        Released?.Invoke(
+            sender,
+            new(_lastPointerPosition, false, e));
     }
 
     private void OnUnoSkiaPointerWheelChanged(object sender, PointerRoutedEventArgs e)
