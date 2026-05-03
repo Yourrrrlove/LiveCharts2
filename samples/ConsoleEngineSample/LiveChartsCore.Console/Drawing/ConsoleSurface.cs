@@ -58,6 +58,37 @@ public sealed class ConsoleSurface
     /// </summary>
     public LvcColor Background { get; set; } = new(0, 0, 0);
 
+    /// <summary>
+    /// A high-contrast foreground for text/marks rendered directly on the surface
+    /// background — picks dark on light terminals, light on dark. Use for titles, marks,
+    /// anything that should pop against the chart bg.
+    /// </summary>
+    public LvcColor StrongForeground =>
+        IsLightBackground
+            ? new LvcColor(20, 20, 25)
+            : new LvcColor(235, 235, 240);
+
+    /// <summary>
+    /// A medium-contrast foreground for de-emphasized text — axis labels, legend names,
+    /// etc. Same dark-on-light / light-on-dark logic as <see cref="StrongForeground"/> but
+    /// closer to the background, so it reads as a header for the chart rather than another
+    /// data layer competing for attention.
+    /// </summary>
+    public LvcColor SubtleForeground =>
+        IsLightBackground
+            ? new LvcColor(80, 80, 90)
+            : new LvcColor(180, 180, 180);
+
+    /// <summary>
+    /// Brightness threshold of 128 splits the LvcColor RGB cube cleanly enough for our
+    /// purposes — perceived-luminance weighting (.299/.587/.114) would only matter at
+    /// edge tones we never hit (chart backgrounds are almost always near-black or near-
+    /// white). A=0 (background unset, e.g. OSC 11 detection failed) treats as dark since
+    /// the Sixel encoder also defaults to a dark fallback in that case.
+    /// </summary>
+    public bool IsLightBackground =>
+        Background.A != 0 && (Background.R + Background.G + Background.B) / 3 > 128;
+
     public ConsoleSurface(int width, int height, ConsoleRenderMode mode = ConsoleRenderMode.HalfBlock,
         int sixelCellWidth = 8, int sixelCellHeight = 16)
     {

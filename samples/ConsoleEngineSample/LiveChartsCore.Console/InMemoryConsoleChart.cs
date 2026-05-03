@@ -495,7 +495,7 @@ public abstract class InMemoryConsoleChart
         var x = (surface.Width - title.Length * charW) / 2;
         if (x < 0) x = 0;
 
-        var fg = new LvcColor(235, 235, 240);
+        var fg = surface.StrongForeground;
         if (surface.Mode == ConsoleRenderMode.Sixel)
             Drawing.BitmapFont.DrawText(surface, x, 0, title, fg);
         else

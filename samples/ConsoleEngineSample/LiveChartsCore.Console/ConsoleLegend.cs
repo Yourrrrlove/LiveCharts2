@@ -99,7 +99,7 @@ public class ConsoleLegend : IChartLegend
             y = (surface.Height - _entries.Count * charH) / 2;
         }
 
-        var fg = new LvcColor(200, 200, 200);
+        var fg = surface.SubtleForeground;
         var cursorX = x;
         var cursorY = y;
 
