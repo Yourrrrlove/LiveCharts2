@@ -447,6 +447,17 @@ public abstract class InMemoryConsoleChart
     /// </summary>
     public DateTime LastMouseInputTimeUtc { get; private set; } = DateTime.MinValue;
 
+    /// <summary>
+    /// Optional chart title rendered as a centered strip at the top of the surface. Console-
+    /// specific shortcut — sidesteps the engine's Visual-element title machinery (which
+    /// requires a per-platform LabelVisual implementation) by rendering directly in our
+    /// post-DrawFrame overlay pass. Doesn't reserve space, so on tightly-sized charts the
+    /// title may overlap the top of the chart's content; pad your terminal accordingly or
+    /// leave it null. Distinct from the IChartView.Title property on derived chart types,
+    /// which expects an engine-managed Visual / VisualElement instead of a plain string.
+    /// </summary>
+    public string? TitleText { get; set; }
+
     internal void NoteMouseInput() => LastMouseInputTimeUtc = DateTime.UtcNow;
 
     /// <summary>
@@ -469,6 +480,26 @@ public abstract class InMemoryConsoleChart
         if (core?.Tooltip is ConsoleTooltip tooltip) tooltip.Render(surface);
 
         RenderSelectedPointsMarker(surface);
+        RenderTitle(surface);
+    }
+
+    private void RenderTitle(ConsoleSurface surface)
+    {
+        var title = TitleText;
+        if (string.IsNullOrEmpty(title)) return;
+
+        var (charW, charH) = surface.Mode == ConsoleRenderMode.Sixel
+            ? (Drawing.BitmapFont.CellWidth(), Drawing.BitmapFont.CellHeight())
+            : (surface.CellWidth, surface.CellHeight);
+
+        var x = (surface.Width - title.Length * charW) / 2;
+        if (x < 0) x = 0;
+
+        var fg = new LvcColor(235, 235, 240);
+        if (surface.Mode == ConsoleRenderMode.Sixel)
+            Drawing.BitmapFont.DrawText(surface, x, 0, title, fg);
+        else
+            surface.DrawText(x, 0, title, fg);
     }
 
     /// <summary>

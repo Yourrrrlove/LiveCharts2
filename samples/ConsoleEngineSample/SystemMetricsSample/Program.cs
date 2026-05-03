@@ -81,6 +81,14 @@ var topChart = (CartesianChart)Configure(new CartesianChart
     XAxes = [new Axis { Labels = topProcNames }],
 });
 
+// Titles render as a centered strip at the top of each surface — handy on a 2x2 grid
+// where the legend strip alone (one short series name per panel) doesn't immediately tell
+// you which chart you're looking at without reading values off the axes.
+cpuChart.TitleText = "CPU %";
+memChart.TitleText = "Memory MB";
+procChart.TitleText = "Processes";
+topChart.TitleText = "Top by memory (MB)";
+
 var charts = new[] { cpuChart, memChart, procChart, topChart };
 
 CartesianChart MakeLineChart(string name, ObservableCollection<ObservableValue> data) =>

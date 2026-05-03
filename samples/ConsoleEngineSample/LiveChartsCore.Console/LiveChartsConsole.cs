@@ -48,6 +48,12 @@ public static class LiveChartsConsole
                     axis.ShowSeparatorLines = true;
                     axis.LabelsPaint = new SolidColorPaint(new(180, 180, 180));
 
+                    // Axis name (rendered when axis.Name is set). Slightly brighter than the
+                    // tick labels so the title reads as a header above/beside them. Engine
+                    // reserves space for this via DrawMargin when Name is non-null.
+                    axis.NamePaint = new SolidColorPaint(new(220, 220, 220));
+                    axis.NameTextSize = Drawing.Geometries.LabelGeometry.GlyphPixelsH;
+
                     var lineColor = new LvcColor(80, 80, 80);
 
                     if (axis is ICartesianAxis cartesian)
