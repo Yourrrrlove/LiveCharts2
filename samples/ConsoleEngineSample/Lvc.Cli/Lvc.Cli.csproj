@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Lvc.Cli</RootNamespace>
+    <AssemblyName>lvc</AssemblyName>
+
+    <!-- dotnet-tool packaging — once published to NuGet, users install with
+         `dotnet tool install -g LiveChartsCore.Console.Cli`. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>lvc</ToolCommandName>
+    <PackageId>LiveChartsCore.Console.Cli</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>LiveCharts Contributors</Authors>
+    <Description>Render LiveCharts in the terminal from a JSON spec.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LiveChartsCore.Console\LiveChartsCore.Console.csproj" />
+  </ItemGroup>
+
+</Project>
