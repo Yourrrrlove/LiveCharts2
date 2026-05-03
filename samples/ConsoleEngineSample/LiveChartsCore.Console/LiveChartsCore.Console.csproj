@@ -22,6 +22,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ConsoleTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\..\..\src\skiasharp\_Shared\SourceGenChart.*.cs">
       <Link>%(Filename).cs</Link>
       <DependentUpon>SourceGenChart.cs</DependentUpon>
