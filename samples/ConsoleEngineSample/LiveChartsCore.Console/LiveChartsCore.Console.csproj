@@ -6,6 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>LiveChartsCore.Console</RootNamespace>
     <AssemblyName>LiveChartsCore.Console</AssemblyName>
+    <PathToPackAssets>../../../</PathToPackAssets>
+  </PropertyGroup>
+
+  <Import Project="../../../nuget.props" />
+  <PropertyGroup>
+    <Description>
+      $(Description) This package renders LiveCharts charts in the terminal — HalfBlock, Braille and Sixel modes with mouse / keyboard input. Pair with LiveChartsCore.Console.Cli for a ready-made `lvc` command, or use this package directly to embed the engine in your own .NET app.
+    </Description>
   </PropertyGroup>
 
   <ItemGroup>
