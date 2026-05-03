@@ -15,11 +15,26 @@
     <PackageId>LiveChartsCore.Console.Cli</PackageId>
     <Version>0.1.0</Version>
     <Authors>LiveCharts Contributors</Authors>
-    <Description>Render LiveCharts in the terminal from a JSON spec.</Description>
+    <Description>
+      Render LiveCharts charts in the terminal from a JSON spec.
+      Supports HalfBlock, Braille, and Sixel rendering with auto-detection.
+      Designed for AI-driven clients and shell pipelines that want
+      animated, interactive-quality charts without integrating .NET directly.
+    </Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Live-Charts/LiveCharts2</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Live-Charts/LiveCharts2</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>livecharts;chart;terminal;console;sixel;ansi;cli;dotnet-tool</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\LiveChartsCore.Console\LiveChartsCore.Console.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>
