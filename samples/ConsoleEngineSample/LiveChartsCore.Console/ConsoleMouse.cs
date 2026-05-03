@@ -237,40 +237,79 @@ public sealed class ConsoleMouse : IDisposable
 
     private void TrySetRawConsoleMode()
     {
-        if (!OperatingSystem.IsWindows()) return;
-        try
+        if (OperatingSystem.IsWindows())
         {
-            var handle = GetStdHandle(STD_INPUT_HANDLE);
-            if (handle == IntPtr.Zero) return;
-            if (!GetConsoleMode(handle, out var mode)) return;
+            try
+            {
+                var handle = GetStdHandle(STD_INPUT_HANDLE);
+                if (handle == IntPtr.Zero) return;
+                if (!GetConsoleMode(handle, out var mode)) return;
 
-            _originalConsoleMode = mode;
+                _originalConsoleMode = mode;
 
-            // Strip line buffering, echo, and legacy-event sources (window resize / Win32
-            // mouse-event records) — we want xterm SGR sequences only. Keep
-            // ENABLE_PROCESSED_INPUT so Ctrl+C still routes through CancelKeyPress instead
-            // of arriving as a 0x03 byte we'd have to handle ourselves. Enable VT input so
-            // the terminal's xterm-mode escape emissions reach us as raw bytes.
-            var newMode = (mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT |
-                                    ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT))
-                        | ENABLE_VIRTUAL_TERMINAL_INPUT;
+                // Strip line buffering, echo, and legacy-event sources (window resize /
+                // Win32 mouse-event records) — we want xterm SGR sequences only. Keep
+                // ENABLE_PROCESSED_INPUT so Ctrl+C still routes through CancelKeyPress
+                // instead of arriving as a 0x03 byte. Enable VT input so the terminal's
+                // xterm-mode escape emissions reach us as raw bytes.
+                var newMode = (mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT |
+                                        ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT))
+                            | ENABLE_VIRTUAL_TERMINAL_INPUT;
 
-            if (SetConsoleMode(handle, newMode))
-                _modeChanged = true;
+                if (SetConsoleMode(handle, newMode))
+                    _modeChanged = true;
+            }
+            catch { /* mouse capture is best-effort */ }
         }
-        catch { /* mouse capture is best-effort */ }
+        else
+        {
+            // POSIX: shell out to stty to put the terminal in raw mode (no canonical /
+            // line buffering, no echo). Without this, Console.OpenStandardInput().Read
+            // would block until a newline arrives — the terminal's xterm SGR escape
+            // sequences would never reach our reader because they don't include \n.
+            // `isig` keeps Ctrl+C firing SIGINT (which CancelKeyPress hooks). On exit we
+            // run `stty sane` to restore reasonable defaults — not necessarily the user's
+            // exact prior state, but "sane" is close enough for a terminal that was just
+            // a normal interactive shell.
+            _modeChanged = TryRunStty("raw -echo isig");
+        }
     }
 
     private void TryRestoreConsoleMode()
     {
         if (!_modeChanged) return;
-        if (!OperatingSystem.IsWindows()) return;
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                var handle = GetStdHandle(STD_INPUT_HANDLE);
+                if (handle != IntPtr.Zero) SetConsoleMode(handle, _originalConsoleMode);
+            }
+            catch { }
+        }
+        else
+        {
+            _ = TryRunStty("sane");
+        }
+        _modeChanged = false;
+    }
+
+    private static bool TryRunStty(string args)
+    {
         try
         {
-            var handle = GetStdHandle(STD_INPUT_HANDLE);
-            if (handle != IntPtr.Zero) SetConsoleMode(handle, _originalConsoleMode);
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "stty",
+                Arguments = args,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p is null) return false;
+            return p.WaitForExit(1000) && p.ExitCode == 0;
         }
-        catch { }
-        _modeChanged = false;
+        catch { return false; }
     }
 }
