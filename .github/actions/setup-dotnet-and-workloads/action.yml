@@ -18,34 +18,8 @@ runs:
           **/*.props
           global.json
 
-    - name: Resolve DOTNET_ROOT and workload cache key
-      if: ${{ inputs.workloads != '' }}
-      id: dotnet-root
-      shell: pwsh
-      run: |
-        $root = $env:DOTNET_ROOT
-        if (-not $root) { $root = Join-Path $HOME ".dotnet" }
-        $root = $root -replace '\\','/'
-        "path=$root" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-        # GitHub cache keys can't contain commas; collapse "wasm-tools, maui" to "wasm-tools-maui"
-        $key = ("${{ inputs.workloads }}" -replace '[, ]+','-').Trim('-')
-        "key=$key" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-    - name: Cache .NET workloads
-      if: ${{ inputs.workloads != '' }}
-      id: workload-cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          ${{ steps.dotnet-root.outputs.path }}/sdk-manifests
-          ${{ steps.dotnet-root.outputs.path }}/packs
-          ${{ steps.dotnet-root.outputs.path }}/metadata
-          ${{ steps.dotnet-root.outputs.path }}/library-packs
-          ${{ steps.dotnet-root.outputs.path }}/template-packs
-        key: ${{ runner.os }}-dotnet-workloads-${{ steps.dotnet-root.outputs.key }}-${{ hashFiles('.github/workloads/rollback.json') }}
-
     - name: Install Workloads
-      if: ${{ inputs.workloads != '' && steps.workload-cache.outputs.cache-hit != 'true' }}
+      if: ${{ inputs.workloads != '' }}
       shell: pwsh
       run: |
         $rollback = "${{ github.workspace }}/.github/workloads/rollback.json"
