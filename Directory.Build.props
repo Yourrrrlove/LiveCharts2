@@ -22,7 +22,7 @@
     Because GPU has better support on the latest versions of SkiaSharp,
     and now LiveCharts defaults to GPU when possible.
     -->
-    <LatestSkiaSharpVersion>3.119.0</LatestSkiaSharpVersion>
+    <LatestSkiaSharpVersion>3.119.1</LatestSkiaSharpVersion>
 
     <!--
     Must be compatible with the SkiaSharp version, on WASM the
