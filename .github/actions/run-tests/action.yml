@@ -152,6 +152,11 @@ runs:
         shell: pwsh
         command: dotnet-coverage collect "dotnet run --project tests/SnapshotTests/SnapshotTests.csproj -c Release --report-trx" -o snapshot.coverage
 
+    # NOTE: not wrapping in `dotnet-coverage collect` like core/snapshot do — for some
+    # reason the parent `Install Coverage Tools` step runs for test-snapshot but gets
+    # silently skipped for test-console (same composite action, same commit), so the
+    # `dotnet-coverage` binary isn't on PATH and the run fails. Dropping coverage
+    # collection here unblocks CI; revisit when the runner-side oddity is understood.
     - name: Run console tests
       uses: nick-fields/retry@v3.0.2
       if : ${{ inputs.test-type == 'console' }}
@@ -159,7 +164,7 @@ runs:
         timeout_minutes: 8
         max_attempts: 3
         shell: pwsh
-        command: dotnet-coverage collect "dotnet run --project tests/ConsoleTests/ConsoleTests.csproj -c Debug -f ${{ inputs.target-framework }} --report-trx" -o console-${{ inputs.target-framework }}.coverage
+        command: dotnet run --project tests/ConsoleTests/ConsoleTests.csproj -c Debug -f ${{ inputs.target-framework }} --report-trx
 
     - name: Upload snapshot diffs
       if: failure() && inputs.test-type == 'snapshot'
@@ -177,7 +182,7 @@ runs:
         overwrite: true
 
     - name: Upload coverage results
-      if: ${{ inputs.test-type == 'core' || inputs.test-type == 'snapshot' || inputs.test-type == 'console' }}
+      if: ${{ inputs.test-type == 'core' || inputs.test-type == 'snapshot' }}
       uses: actions/upload-artifact@v6.0.0
       with:
         name: coverage-${{ inputs.test-type }}-${{ inputs.target-framework }}
