@@ -2,7 +2,7 @@ name: "Run tests"
 description: "Runs the specified tests using ui or core tests"
 inputs:
   test-type:
-    description: 'The type of tests to run (factos, factos-android, factos-ios, core or snapshot)'
+    description: 'The type of tests to run (factos, factos-android, factos-ios, core, snapshot or console)'
     required: true
   id:
     description: "Identifier for the test target"
@@ -151,6 +151,16 @@ runs:
         max_attempts: 3
         shell: pwsh
         command: dotnet-coverage collect "dotnet run --project tests/SnapshotTests/SnapshotTests.csproj -c Release --report-trx" -o snapshot.coverage
+
+    - name: Run console tests
+      uses: nick-fields/retry@v3.0.2
+      if : ${{ inputs.test-type == 'console' }}
+      with:
+        timeout_minutes: 8
+        max_attempts: 3
+        shell: pwsh
+        command: dotnet-coverage collect "dotnet run --project tests/ConsoleTests/ConsoleTests.csproj -c Debug -f ${{ inputs.target-framework }} --report-trx" -o console-${{ inputs.target-framework }}.coverage
+
     - name: Upload snapshot diffs
       if: failure() && inputs.test-type == 'snapshot'
       uses: actions/upload-artifact@v6.0.0
@@ -167,7 +177,7 @@ runs:
         overwrite: true
 
     - name: Upload coverage results
-      if: ${{ inputs.test-type == 'core' || inputs.test-type == 'snapshot' }}
+      if: ${{ inputs.test-type == 'core' || inputs.test-type == 'snapshot' || inputs.test-type == 'console' }}
       uses: actions/upload-artifact@v6.0.0
       with:
         name: coverage-${{ inputs.test-type }}-${{ inputs.target-framework }}

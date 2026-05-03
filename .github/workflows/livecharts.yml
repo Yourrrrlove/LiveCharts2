@@ -145,10 +145,26 @@ jobs:
           livecharts-suffix: ${{ needs.prepare.outputs.suffix }}
           test-type: snapshot
 
+  test-console:
+    runs-on: windows-2025
+    needs: [prepare]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.1
+
+      - name: Run tests
+        uses: ./.github/actions/run-tests
+        with:
+          id: console
+          test-id: console-net8.0
+          livecharts-suffix: ${{ needs.prepare.outputs.suffix }}
+          test-type: console
+          target-framework: net8.0
+
   report-code-coverage:
     runs-on: ubuntu-24.04
-    if: ${{ needs.test-core.result == 'success' && needs.test-snapshot.result == 'success' }}
-    needs: [test-core, test-snapshot]
+    if: ${{ needs.test-core.result == 'success' && needs.test-snapshot.result == 'success' && needs.test-console.result == 'success' }}
+    needs: [test-core, test-snapshot, test-console]
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.1
@@ -169,7 +185,7 @@ jobs:
         run: dotnet-coverage merge ./artifacts/*.coverage -f xml -o coverage.xml
 
       - name : Generate Badge
-        run: reportgenerator -reports:coverage.xml -targetdir:badge-out -reporttypes:HtmlSummary,Badges,JsonSummary -filters:"-ViewModelsSamples*;-CommunityToolkit*;-Analyzer*;-MSTest*;-SnapshotTests*;-CoreTests*"
+        run: reportgenerator -reports:coverage.xml -targetdir:badge-out -reporttypes:HtmlSummary,Badges,JsonSummary -filters:"-ViewModelsSamples*;-CommunityToolkit*;-Analyzer*;-MSTest*;-SnapshotTests*;-CoreTests*;-ConsoleTests*"
 
       - name: Get previous coverage from badges branch
         id: old-coverage
