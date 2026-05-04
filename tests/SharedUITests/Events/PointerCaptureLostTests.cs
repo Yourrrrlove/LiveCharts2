@@ -39,6 +39,14 @@ using Avalonia.Input;
 using Avalonia.Threading;
 #endif
 
+#if WINUI_UI_TESTING || UNO_UI_TESTING
+using System;
+using System.Reflection;
+using System.Threading.Tasks;
+using LiveChartsCore.Native.Events;
+using Microsoft.UI.Xaml;
+#endif
+
 namespace SharedUITests.Events;
 
 public class PointerCaptureLostTests
@@ -209,7 +217,106 @@ public class PointerCaptureLostTests
     }
 #endif
 
-#if WPF_UI_TESTING || AVALONIA_UI_TESTING
+#if WINUI_UI_TESTING || UNO_UI_TESTING
+    // regression for https://github.com/Live-Charts/LiveCharts2/issues/1576 on the
+    // WinUI/Uno-Skia native pointer controller: when an ancestor steals capture
+    // mid-gesture the controller raises a synthetic Released so the chart can
+    // release its pan/drag state. That synthetic release used to hard-code
+    // IsSecondaryPress=false, which mis-reported right-click drags as primary
+    // releases. The controller now snapshots the original press button at press
+    // time and replays it on PointerCaptureLost.
+    [AppTestMethod]
+    public async Task WinUI_pointer_capture_lost_preserves_secondary_press_flag()
+    {
+        var sut = await App.NavigateTo<Samples.General.FirstChart.View>();
+        await sut.Chart.WaitUntilChartRenders();
+
+        var chart = (FrameworkElement)sut.Chart;
+
+        var (pc, captureLost) = ResolvePointerControllerAndCaptureLostMethod(chart);
+
+        var pcType = pc.GetType();
+        var isDownField = pcType.GetField("_isPointerDown", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(isDownField);
+        var wasSecondaryField = pcType.GetField("_wasSecondaryPress", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(wasSecondaryField);
+
+        var releasedEvent = pcType.GetEvent("Released");
+        Assert.NotNull(releasedEvent);
+
+        PressedEventArgs? captured = null;
+        PressedHandler observer = (_, args) => captured = args;
+        releasedEvent!.AddEventHandler(pc, observer);
+        try
+        {
+            await RunOnDispatcherAsync(chart, () =>
+            {
+                // simulate the state right after a real right-button press: the
+                // controller is armed and remembers the press was secondary. The
+                // capture-lost replay must surface that secondary flag back out.
+                isDownField!.SetValue(pc, true);
+                wasSecondaryField!.SetValue(pc, true);
+
+                // The handler does not dereference its args (we asserted this in
+                // the source), so null sender / null PointerRoutedEventArgs is safe.
+                _ = captureLost.Invoke(pc, [null!, null!]);
+            });
+        }
+        finally
+        {
+            releasedEvent.RemoveEventHandler(pc, observer);
+        }
+
+        Assert.NotNull(captured);
+        Assert.True(
+            captured!.IsSecondaryPress,
+            "synthetic Released raised on PointerCaptureLost must replay the original press's secondary-button flag; otherwise right-click drags interrupted by capture-loss are reported as primary releases.");
+    }
+
+    private static (object Controller, MethodInfo CaptureLost) ResolvePointerControllerAndCaptureLostMethod(FrameworkElement chart)
+    {
+        var sourceGenChartType = WalkBaseTypes(chart.GetType(), "SourceGenChart");
+        Assert.NotNull(sourceGenChartType);
+
+        var pcField = sourceGenChartType!.GetField("_pointerController", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(pcField);
+        var pc = pcField!.GetValue(chart);
+        Assert.NotNull(pc);
+
+        var pcType = pc!.GetType();
+        // Each platform partial owns its own handler name; only one of the two
+        // exists in the assembly being tested. Probe both so a single test method
+        // covers the WinUI sample and the Uno-Skia sample.
+        var captureLost =
+            pcType.GetMethod("OnWindowsPointerCaptureLost", BindingFlags.Instance | BindingFlags.NonPublic) ??
+            pcType.GetMethod("OnUnoSkiaPointerCaptureLost", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(captureLost);
+        return (pc, captureLost!);
+    }
+
+    private static Task RunOnDispatcherAsync(FrameworkElement chart, Action work)
+    {
+        var tcs = new TaskCompletionSource<object?>();
+        if (!chart.DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                work();
+                tcs.SetResult(null);
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        }))
+        {
+            tcs.SetException(new InvalidOperationException("Failed to enqueue work on the chart's DispatcherQueue."));
+        }
+        return tcs.Task;
+    }
+#endif
+
+#if WPF_UI_TESTING || AVALONIA_UI_TESTING || WINUI_UI_TESTING || UNO_UI_TESTING
     private static Type? WalkBaseTypes(Type? start, string name)
     {
         for (var t = start; t is not null; t = t.BaseType)
