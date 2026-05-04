@@ -114,12 +114,18 @@ public abstract partial class SourceGenChart : UserControl, IChartView
         if (Keyboard.Modifiers > 0) return;
         _ = CaptureMouse();
 
+        // Arm _isPointerDown BEFORE invoking the user's command. If the command
+        // synchronously transfers capture (e.g. focuses or captures another
+        // element) WPF raises LostMouseCapture immediately, and the recovery
+        // handler must observe the flag set so it can synthesize a pointer-up.
+        // Otherwise the chart is left in the same stuck-drag state #1576 fixes.
+        _isPointerDown = true;
+
         var p = e.GetPosition(this);
         var cArgs = new PointerCommandArgs(this, new(p.X, p.Y), e);
         if (PointerPressedCommand?.CanExecute(cArgs) == true)
             PointerPressedCommand.Execute(cArgs);
 
-        _isPointerDown = true;
         CoreChart?.InvokePointerDown(new(p.X, p.Y), e.ChangedButton == MouseButton.Right);
     }
 

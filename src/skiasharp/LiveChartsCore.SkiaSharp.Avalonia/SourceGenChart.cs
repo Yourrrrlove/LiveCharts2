@@ -140,6 +140,15 @@ public abstract partial class SourceGenChart : UserControl, IChartView, ICustomH
         if (e.KeyModifiers > 0) return;
         var p = e.GetPosition(this);
 
+        // Arm _isPointerDown BEFORE invoking the user's command. If the command
+        // synchronously transfers capture (e.g. focuses or captures another
+        // element) Avalonia raises PointerCaptureLost immediately, and the
+        // recovery handler must observe the flag set so it can synthesize a
+        // pointer-up. Otherwise the chart is left in the same stuck-drag state
+        // #1576 fixes.
+        _isPointerDown = true;
+        _lastPointerPosition = new LvcPoint((float)p.X, (float)p.Y);
+
         if (PointerPressedCommand is not null)
         {
             var args = new PointerCommandArgs(this, new(p.X, p.Y), e);
@@ -151,8 +160,6 @@ public abstract partial class SourceGenChart : UserControl, IChartView, ICustomH
             e.GetCurrentPoint(this).Properties.IsRightButtonPressed ||
             (DateTime.Now - _lastPresed).TotalMilliseconds < 500;
 
-        _isPointerDown = true;
-        _lastPointerPosition = new LvcPoint((float)p.X, (float)p.Y);
         CoreChart?.InvokePointerDown(_lastPointerPosition, isSecondary);
         _lastPresed = DateTime.Now;
     }
