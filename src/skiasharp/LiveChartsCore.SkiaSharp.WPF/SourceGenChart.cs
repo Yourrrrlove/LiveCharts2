@@ -147,11 +147,17 @@ public abstract partial class SourceGenChart : UserControl, IChartView
     {
         var p = e.GetPosition(this);
 
+        // Clear _isPointerDown BEFORE invoking the user's command. If the command
+        // synchronously changes capture (e.g. focuses or captures another element)
+        // WPF raises LostMouseCapture immediately; with the flag still set the
+        // recovery handler would then synthesize a redundant pointer-up after the
+        // real release. Clearing first keeps the release path single-shot.
+        _isPointerDown = false;
+
         var cArgs = new PointerCommandArgs(this, new(p.X, p.Y), e);
         if (PointerReleasedCommand?.CanExecute(cArgs) == true)
             PointerReleasedCommand.Execute(cArgs);
 
-        _isPointerDown = false;
         CoreChart?.InvokePointerUp(new(p.X, p.Y), e.ChangedButton == MouseButton.Right);
         ReleaseMouseCapture();
     }
