@@ -156,6 +156,7 @@ public class VisualElementsTests
         Assert.AreEqual(1000d, visual.LabelPaint!.ZIndex);
     }
 
+#if !NET462 // covariant returns on TestRectangleVisual.DrawnElement need .NET 5+
     [TestMethod]
     public void Visual_ZIndexPropagatesToDrawnTask_RendersAboveSeries()
     {
@@ -195,6 +196,7 @@ public class VisualElementsTests
 
         public LiveChartsCore.Painting.Paint?[] GetPaintTasksForTest() => GetPaintTasks();
     }
+#endif
 
     [TestMethod]
     public void GeometryVisual_WithLabelInChartExercisesLabelPaintBranch()
