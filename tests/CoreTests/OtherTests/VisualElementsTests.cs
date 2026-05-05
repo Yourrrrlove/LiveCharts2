@@ -157,6 +157,46 @@ public class VisualElementsTests
     }
 
     [TestMethod]
+    public void Visual_ZIndexPropagatesToDrawnTask_RendersAboveSeries()
+    {
+        // Same regression as above (#1856) but for the Visual base class, used
+        // by the canonical docs samples (RectangleVisual et al.).
+        var visual = new TestRectangleVisual { ZIndex = 1000 };
+
+        var chart = new SKCartesianChart
+        {
+            Width = 400,
+            Height = 400,
+            Series = [
+                new ColumnSeries<double> { Values = [1d, 2d, 3d] }
+            ],
+            VisualElements = [visual]
+        };
+
+        using var image = chart.GetImage();
+
+        var drawnTask = visual.GetPaintTasksForTest()[0];
+        Assert.IsNotNull(drawnTask);
+        Assert.AreEqual(1000d, drawnTask!.ZIndex);
+    }
+
+    private sealed class TestRectangleVisual : Visual
+    {
+        protected internal override RectangleGeometry DrawnElement { get; } =
+            new RectangleGeometry { Fill = new SolidColorPaint(SKColors.Red) };
+
+        protected override void Measure(LiveChartsCore.Chart chart)
+        {
+            DrawnElement.X = 10;
+            DrawnElement.Y = 10;
+            DrawnElement.Width = 40;
+            DrawnElement.Height = 40;
+        }
+
+        public LiveChartsCore.Painting.Paint?[] GetPaintTasksForTest() => GetPaintTasks();
+    }
+
+    [TestMethod]
     public void GeometryVisual_WithLabelInChartExercisesLabelPaintBranch()
     {
         // Existing VisualElementsTests.Dispose uses GeometryVisual without a Label/LabelPaint,
