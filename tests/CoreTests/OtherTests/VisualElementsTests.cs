@@ -117,6 +117,46 @@ public class VisualElementsTests
     }
 
     [TestMethod]
+    public void VisualElement_ZIndexPropagatesToPaints_RendersAboveSeries()
+    {
+        // Regression for #1856: VisualElement paints used to default to ZIndex=0
+        // while a default-ZIndex ColumnSeries puts its Fill at SeriesId+0.1, so
+        // visuals were drawn behind the series. Setting VisualElement.ZIndex must
+        // push every paint produced by the visual to that z-index.
+        var visual = new GeometryVisual<RectangleGeometry>
+        {
+            X = 10,
+            Y = 10,
+            Width = 50,
+            Height = 50,
+            Fill = new SolidColorPaint(SKColors.Blue),
+            Stroke = new SolidColorPaint(SKColors.Red),
+            Label = "x",
+            LabelPaint = new SolidColorPaint(SKColors.Black),
+            LabelSize = 12,
+            ZIndex = 1000,
+            LocationUnit = MeasureUnit.Pixels,
+            SizeUnit = MeasureUnit.Pixels
+        };
+
+        var chart = new SKCartesianChart
+        {
+            Width = 400,
+            Height = 400,
+            Series = [
+                new ColumnSeries<double> { Values = [1d, 2d, 3d] }
+            ],
+            VisualElements = [visual]
+        };
+
+        using var image = chart.GetImage();
+
+        Assert.AreEqual(1000d, visual.Fill!.ZIndex);
+        Assert.AreEqual(1000d, visual.Stroke!.ZIndex);
+        Assert.AreEqual(1000d, visual.LabelPaint!.ZIndex);
+    }
+
+    [TestMethod]
     public void GeometryVisual_WithLabelInChartExercisesLabelPaintBranch()
     {
         // Existing VisualElementsTests.Dispose uses GeometryVisual without a Label/LabelPaint,
