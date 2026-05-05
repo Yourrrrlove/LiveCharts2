@@ -1,7 +1,10 @@
 ﻿using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using LiveChartsCore;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.Drawing;
+using LiveChartsCore.Kernel;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Drawing;
 using LiveChartsCore.SkiaSharpView.Drawing.Geometries;
@@ -29,6 +32,68 @@ public sealed class SpecialCasesTests
         };
 
         chart.AssertSnapshotMatches($"{nameof(SpecialCasesTests)}_{nameof(NullPoints)}");
+    }
+
+    // https://github.com/Live-Charts/LiveCharts2/issues/1847
+    // The library does not silently rewrite NaN / Infinity to a gap; users opt
+    // in via a custom mapper or IChartEntity (see docs/overview/1.5.mappers.md
+    // "NaN and Infinity"). This test locks the sentinel-coordinate recipe for
+    // the mapper variant: Mapping returns Coordinate(index, 0) so the bar
+    // collapses but the column's hover area survives, paired with a
+    // YToolTipLabelFormatter that prints the original non-finite sign so the
+    // user can still see what was at that index. Five frames cover the three
+    // non-finite kinds plus a recovery to a finite value.
+    [TestMethod]
+    public void Issue1847_NonFiniteValuesViaCustomMapper()
+    {
+        Coordinate Map(double value, int index) =>
+            double.IsNaN(value) || double.IsInfinity(value)
+                ? new Coordinate(index, 0)
+                : new Coordinate(index, value);
+
+        static string Format(ChartPoint<double, RoundedRectangleGeometry, LabelGeometry> p) =>
+            double.IsPositiveInfinity(p.Model) ? "+∞"
+            : double.IsNegativeInfinity(p.Model) ? "-∞"
+            : double.IsNaN(p.Model) ? "NaN"
+            : p.Model.ToString();
+
+        var values = new ObservableCollection<double> { 1, 2, 3, 4, 5 };
+
+        var chart = new SKCartesianChart
+        {
+            Series = [
+                new ColumnSeries<double>
+                {
+                    Values = values,
+                    Mapping = Map,
+                    YToolTipLabelFormatter = Format
+                }
+            ],
+            Width = 600,
+            Height = 600
+        };
+
+        // Hover at index 1 so every snapshot includes the tooltip overlay.
+        chart.PointerAt(180, 300);
+
+        // Frame 0: all finite. Tooltip on bar 1 reads "2".
+        chart.AssertSnapshotMatches($"{nameof(SpecialCasesTests)}_{nameof(Issue1847_NonFiniteValuesViaCustomMapper)}_0");
+
+        // Frame 1: index 1 is +Infinity. Bar collapses, tooltip reads "+∞".
+        values[1] = double.PositiveInfinity;
+        chart.AssertSnapshotMatches($"{nameof(SpecialCasesTests)}_{nameof(Issue1847_NonFiniteValuesViaCustomMapper)}_1");
+
+        // Frame 2: NaN at index 1. Tooltip reads "NaN".
+        values[1] = double.NaN;
+        chart.AssertSnapshotMatches($"{nameof(SpecialCasesTests)}_{nameof(Issue1847_NonFiniteValuesViaCustomMapper)}_2");
+
+        // Frame 3: -Infinity at index 1. Tooltip reads "-∞".
+        values[1] = double.NegativeInfinity;
+        chart.AssertSnapshotMatches($"{nameof(SpecialCasesTests)}_{nameof(Issue1847_NonFiniteValuesViaCustomMapper)}_3");
+
+        // Frame 4: restore a finite value. Bar comes back, tooltip reads "2".
+        values[1] = 2;
+        chart.AssertSnapshotMatches($"{nameof(SpecialCasesTests)}_{nameof(Issue1847_NonFiniteValuesViaCustomMapper)}_4");
     }
 
     [TestMethod]
