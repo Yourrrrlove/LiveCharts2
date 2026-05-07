@@ -994,6 +994,7 @@ public class CartesianChartEngine(
     internal void ClearPointerDown()
     {
         _isPanning = false;
+        _isPointerDown = false;
         _sectionZoomingStart = null;
     }
 

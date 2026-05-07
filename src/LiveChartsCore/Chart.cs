@@ -59,6 +59,12 @@ public abstract class Chart
     private LvcPoint _pointerPanningPosition = new(-10, -10);
     private LvcPoint _pointerPreviousPanningPosition = new(-10, -10);
     internal bool _isPanning = false;
+    internal bool _isPointerDown = false;
+    // Squared pixel distance the pointer must travel after pressing before pan
+    // engages. Below this threshold a press+move is treated as a tooltip-only
+    // gesture (matters most on touch, where pan and tooltip share one finger;
+    // see issue #1957). Mirrors the threshold already used by GeoMapChart.
+    private const float PanEngageThresholdSq = 25f;
     private readonly HashSet<ChartPoint> _activePoints = [];
     private LvcSize _previousSize = new();
     private int _nextSeriesId = 0;
@@ -338,7 +344,7 @@ public abstract class Chart
     /// <param name="isSecondaryAction">Flags the action as secondary (normally rigth click or double tap on mobile)</param>
     protected internal virtual void InvokePointerDown(LvcPoint point, bool isSecondaryAction)
     {
-        _isPanning = true;
+        _isPointerDown = true;
         _pointerPreviousPanningPosition = point;
 
         lock (Canvas.Sync)
@@ -391,7 +397,28 @@ public abstract class Chart
     {
         _pointerPosition = point;
         _isPointerIn = true;
-        _tooltipThrottler.Call();
+
+        // Pan engagement deadzone: with a finger down, defer pan until the pointer
+        // has moved past PanEngageThresholdSq pixels from the press point. Without
+        // this, every touch+move on mobile fires both tooltip and pan throttlers
+        // simultaneously and the tooltip cannot lock on as the data scrolls
+        // underneath the finger (issue #1957). On desktop the threshold is below
+        // perceptible movement so click+drag still pans as before.
+        if (_isPointerDown && !_isPanning)
+        {
+            var pdx = point.X - _pointerPreviousPanningPosition.X;
+            var pdy = point.Y - _pointerPreviousPanningPosition.Y;
+            if (pdx * pdx + pdy * pdy > PanEngageThresholdSq)
+            {
+                _isPanning = true;
+#if NET5_0_OR_GREATER
+                _isTooltipCanceled = true;
+#endif
+                View.InvokeOnUIThread(CloseTooltip);
+            }
+        }
+
+        if (!_isPanning) _tooltipThrottler.Call();
 
         // experimental events from the chart engine.
         PointerMove?.Invoke(this, point);
@@ -408,6 +435,8 @@ public abstract class Chart
     /// <param name="isSecondaryAction">Flags the action as secondary (normally rigth click or double tap on mobile)</param>
     protected internal virtual void InvokePointerUp(LvcPoint point, bool isSecondaryAction)
     {
+        _isPointerDown = false;
+
 #if NET5_0_OR_GREATER
         if (_isMobile)
         {
@@ -417,6 +446,12 @@ public abstract class Chart
             }
 
             View.InvokeOnUIThread(CloseTooltip);
+        }
+        else
+        {
+            // Clear the pan-engagement tooltip suppression on desktop so the next
+            // hover after a drag-pan can show a tooltip again.
+            _isTooltipCanceled = false;
         }
 #endif
 
