@@ -132,7 +132,8 @@ public class ChartInteractiveApiTests
             new LvcPoint(100, 100));
     }
 
-    private static (SKCartesianChart chart, Axis xAxis, Axis yAxis, CartesianChartEngine core) CreatePinnedChart()
+    private static (SKCartesianChart chart, Axis xAxis, Axis yAxis, CartesianChartEngine core) CreatePinnedChart(
+        ZoomAndPanMode zoomMode = ZoomAndPanMode.None)
     {
         // MinLimit/MaxLimit are pinned so Zoom/Pan operations leave a measurable change
         // on the axis limits without the auto-fit logic snapping things back.
@@ -143,6 +144,7 @@ public class ChartInteractiveApiTests
         {
             Width = 400,
             Height = 400,
+            ZoomMode = zoomMode,
             XAxes = [xAxis],
             YAxes = [yAxis],
             Series = [ new LineSeries<double> { Values = [1d, 2d, 3d, 4d, 5d, 6d, 7d, 8d, 9d, 10d] } ]
@@ -300,7 +302,7 @@ public class ChartInteractiveApiTests
         // Issue #1957 deadzone: a press without movement must not flip the chart
         // into panning mode — otherwise every touch on mobile races the tooltip
         // throttler against the pan throttler from the very first frame.
-        var (_, _, _, core) = CreatePinnedChart();
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.Both);
 
         core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
 
@@ -313,7 +315,7 @@ public class ChartInteractiveApiTests
     public void PointerMove_BelowDeadzoneKeepsTooltipMode()
     {
         // Press + tiny jitter (under the 5px threshold) must stay in tooltip mode.
-        var (_, _, _, core) = CreatePinnedChart();
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.Both);
 
         core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
         core.InvokePointerMove(new LvcPoint(102, 101)); // sqrt(5) ≈ 2.2 px
@@ -327,7 +329,7 @@ public class ChartInteractiveApiTests
     public void PointerMove_AboveDeadzoneEngagesPan()
     {
         // Press + meaningful drag (over the 5px threshold) must engage pan.
-        var (_, _, _, core) = CreatePinnedChart();
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.Both);
 
         core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
         core.InvokePointerMove(new LvcPoint(120, 120)); // 28 px diagonal
@@ -342,7 +344,7 @@ public class ChartInteractiveApiTests
     {
         // After release, _isPanning must clear so a subsequent gesture starts
         // from tooltip mode again.
-        var (_, _, _, core) = CreatePinnedChart();
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.Both);
 
         core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
         core.InvokePointerMove(new LvcPoint(120, 120)); // engages pan
@@ -350,6 +352,40 @@ public class ChartInteractiveApiTests
 
         Assert.IsFalse(core._isPanning, "PointerUp must clear _isPanning.");
         Assert.IsFalse(core._isPointerDown, "PointerUp must clear _isPointerDown.");
+    }
+
+    [TestMethod]
+    public void PointerMove_AboveDeadzone_DoesNotEngagePanWhenZoomModeIsNone()
+    {
+        // Regression for the IsPanEnabled gate: with ZoomMode=None (or any mode
+        // without PanX/PanY), the deadzone must NOT engage on a >5px drag —
+        // otherwise the tooltip throttler would be silently suppressed on
+        // charts that can't pan. Affects Pie/Polar charts and Cartesian charts
+        // configured for zoom-only or no-interaction.
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.None);
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+        core.InvokePointerMove(new LvcPoint(120, 120)); // would engage pan if gate were missing
+
+        Assert.IsFalse(
+            core._isPanning,
+            "Deadzone must not engage when ZoomMode lacks PanX/PanY; otherwise tooltips would be suppressed on non-pannable charts.");
+    }
+
+    [TestMethod]
+    public void PointerMove_AboveDeadzone_DoesNotEngagePanWhenZoomModeIsZoomOnly()
+    {
+        // Zoom-only ZoomMode (e.g. ZoomX) must also keep the deadzone gated off:
+        // panning is not enabled, so the tooltip path must keep working during
+        // a drag.
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.ZoomX | ZoomAndPanMode.ZoomY);
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+        core.InvokePointerMove(new LvcPoint(120, 120));
+
+        Assert.IsFalse(
+            core._isPanning,
+            "Deadzone must not engage when ZoomMode has zoom flags but no pan flags.");
     }
 
     private static SKGeoMap CreateGeoMap(MapProjection projection = MapProjection.Mercator) =>
