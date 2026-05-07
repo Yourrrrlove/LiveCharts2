@@ -32,6 +32,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using LiveChartsCore;
 using LiveChartsCore.Drawing;
+using LiveChartsCore.Kernel;
 using LiveChartsCore.Kernel.Events;
 using LiveChartsCore.Kernel.Sketches;
 using LiveChartsCore.Motion;
@@ -51,6 +52,7 @@ namespace LiveChartsGeneratedCode;
 public abstract partial class SourceGenChart : UserControl, IChartView, ICustomHitTest
 {
     private DateTime _lastPressed;
+    private LvcPoint _lastPressedPosition;
     // Drop the first ~100ms of moves after a press so the platform's pinch
     // detection has a chance to claim the gesture before any single-pointer
     // move feeds the core deadzone (Chart.cs PanEngageThresholdSq) and
@@ -164,10 +166,11 @@ public abstract partial class SourceGenChart : UserControl, IChartView, ICustomH
 
         var isSecondary =
             e.GetCurrentPoint(this).Properties.IsRightButtonPressed ||
-            (DateTime.Now - _lastPressed).TotalMilliseconds < 500;
+            GestureHelpers.IsDoubleTap(_lastPointerPosition, _lastPressedPosition, DateTime.Now - _lastPressed);
 
         CoreChart?.InvokePointerDown(_lastPointerPosition, isSecondary);
         _lastPressed = DateTime.Now;
+        _lastPressedPosition = _lastPointerPosition;
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
