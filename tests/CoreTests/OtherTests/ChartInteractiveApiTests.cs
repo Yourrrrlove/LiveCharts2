@@ -294,6 +294,64 @@ public class ChartInteractiveApiTests
         Assert.IsTrue(yAxis.MaxLimit!.Value > 50, $"NoFit must prevent Y MaxLimit snap-to-data; Y MaxLimit={yAxis.MaxLimit}.");
     }
 
+    [TestMethod]
+    public void PointerDown_AloneDoesNotEngagePan()
+    {
+        // Issue #1957 deadzone: a press without movement must not flip the chart
+        // into panning mode — otherwise every touch on mobile races the tooltip
+        // throttler against the pan throttler from the very first frame.
+        var (_, _, _, core) = CreatePinnedChart();
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+
+        Assert.IsFalse(
+            core._isPanning,
+            "PointerDown alone must not engage pan; pan should engage only after the deadzone is crossed.");
+    }
+
+    [TestMethod]
+    public void PointerMove_BelowDeadzoneKeepsTooltipMode()
+    {
+        // Press + tiny jitter (under the 5px threshold) must stay in tooltip mode.
+        var (_, _, _, core) = CreatePinnedChart();
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+        core.InvokePointerMove(new LvcPoint(102, 101)); // sqrt(5) ≈ 2.2 px
+
+        Assert.IsFalse(
+            core._isPanning,
+            "Movement under the deadzone must not engage pan.");
+    }
+
+    [TestMethod]
+    public void PointerMove_AboveDeadzoneEngagesPan()
+    {
+        // Press + meaningful drag (over the 5px threshold) must engage pan.
+        var (_, _, _, core) = CreatePinnedChart();
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+        core.InvokePointerMove(new LvcPoint(120, 120)); // 28 px diagonal
+
+        Assert.IsTrue(
+            core._isPanning,
+            "Movement past the deadzone must engage pan.");
+    }
+
+    [TestMethod]
+    public void PointerUp_ResetsPanState()
+    {
+        // After release, _isPanning must clear so a subsequent gesture starts
+        // from tooltip mode again.
+        var (_, _, _, core) = CreatePinnedChart();
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+        core.InvokePointerMove(new LvcPoint(120, 120)); // engages pan
+        core.InvokePointerUp(new LvcPoint(120, 120), isSecondaryAction: false);
+
+        Assert.IsFalse(core._isPanning, "PointerUp must clear _isPanning.");
+        Assert.IsFalse(core._isPointerDown, "PointerUp must clear _isPointerDown.");
+    }
+
     private static SKGeoMap CreateGeoMap(MapProjection projection = MapProjection.Mercator) =>
         new()
         {
