@@ -50,8 +50,14 @@ namespace LiveChartsGeneratedCode;
 /// <inheritdoc cref="ICartesianChartView" />
 public abstract partial class SourceGenChart : UserControl, IChartView, ICustomHitTest
 {
-    private DateTime _lastPresed;
-    private readonly int _tolearance = 50;
+    private DateTime _lastPressed;
+    // Drop the first ~100ms of moves after a press so the platform's pinch
+    // detection has a chance to claim the gesture before any single-pointer
+    // move feeds the core deadzone (Chart.cs PanEngageThresholdSq) and
+    // accidentally engages pan. Matches the WinUI/Uno-SkiaRenderer pointer
+    // controllers — the value must stay aligned across all three SkiaSharp
+    // host paths.
+    private const int PressDeadzoneMs = 100;
     private bool _wasInViewport;
     private bool _isPointerDown;
     private LvcPoint _lastPointerPosition;
@@ -158,15 +164,15 @@ public abstract partial class SourceGenChart : UserControl, IChartView, ICustomH
 
         var isSecondary =
             e.GetCurrentPoint(this).Properties.IsRightButtonPressed ||
-            (DateTime.Now - _lastPresed).TotalMilliseconds < 500;
+            (DateTime.Now - _lastPressed).TotalMilliseconds < 500;
 
         CoreChart?.InvokePointerDown(_lastPointerPosition, isSecondary);
-        _lastPresed = DateTime.Now;
+        _lastPressed = DateTime.Now;
     }
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
-        if ((DateTime.Now - _lastPresed).TotalMilliseconds < _tolearance) return;
+        if ((DateTime.Now - _lastPressed).TotalMilliseconds < PressDeadzoneMs) return;
         var p = e.GetPosition(this);
 
         if (PointerMoveCommand is not null)
@@ -182,13 +188,13 @@ public abstract partial class SourceGenChart : UserControl, IChartView, ICustomH
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        // Always clear the press flag, even when bailing out via the tolerance
-        // early-return below; otherwise a fast press-release leaves _isPointerDown
-        // stuck true and a later unrelated PointerCaptureLost would fire a phantom
-        // synthetic pointer-up.
         _isPointerDown = false;
 
-        if ((DateTime.Now - _lastPresed).TotalMilliseconds < _tolearance) return;
+        // No time-gate on Release: matches WinUI/Uno-SkiaRenderer pointer
+        // controllers. A fast press-release inside the press deadzone window
+        // must still flow through to InvokePointerUp so the core chart can
+        // clear _isPointerDown / _isPanning — otherwise the pan-engagement
+        // deadzone (Chart.cs) would stay armed across gestures.
         var p = e.GetPosition(this);
 
         if (PointerReleasedCommand is not null)
