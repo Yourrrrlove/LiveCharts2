@@ -998,6 +998,9 @@ public class CartesianChartEngine(
         _sectionZoomingStart = null;
     }
 
+    internal override bool IsPanEnabled =>
+        (_chartView.ZoomMode & (ZoomAndPanMode.PanX | ZoomAndPanMode.PanY)) != 0;
+
     internal void SubscribeSharedEvents(HashSet<CartesianChartEngine> instance)
     {
         // An experimental feature, it allows a chart to propagate some events to other charts,

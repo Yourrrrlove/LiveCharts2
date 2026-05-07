@@ -337,6 +337,14 @@ public abstract class Chart
         Canvas.Dispose();
     }
 
+    // Whether panning gestures actually move the chart. False on the base
+    // Chart (Pie / Polar / GeoMap have no pan in the core pipeline);
+    // CartesianChartEngine overrides to true when ZoomMode includes PanX or
+    // PanY. Used to gate the press deadzone in InvokePointerMove — without
+    // this, a >5px drag on a non-pannable chart would cancel the tooltip
+    // (because _isPanning gets set) even though no pan actually happens.
+    internal virtual bool IsPanEnabled => false;
+
     /// <summary>
     /// Invokes the pointer down event.
     /// </summary>
@@ -404,7 +412,7 @@ public abstract class Chart
         // simultaneously and the tooltip cannot lock on as the data scrolls
         // underneath the finger (issue #1957). On desktop the threshold is below
         // perceptible movement so click+drag still pans as before.
-        if (_isPointerDown && !_isPanning)
+        if (_isPointerDown && !_isPanning && IsPanEnabled)
         {
             var pdx = point.X - _pointerPreviousPanningPosition.X;
             var pdy = point.Y - _pointerPreviousPanningPosition.Y;
