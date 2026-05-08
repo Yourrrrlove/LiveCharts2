@@ -142,10 +142,11 @@ Build first if needed: `dotnet build samples/<Platform>Sample/... -c Debug`.
 Two paths — pick based on the bug type:
 
 **A. In-app screenshot for visual bugs** (color, shape, position, rendering
-artifacts). All XAML platform samples support `LVC_SCREENSHOT`: when set, the
-sample renders its main window via the framework's native `RenderTargetBitmap`
-~2 s after open and exits. No external tooling, no DPI-scaling surprises, and
-no race against the screenshot tool launching too early:
+artifacts). Avalonia/WPF/WinUI samples support `LVC_SCREENSHOT`: when set,
+the sample renders its main window via the framework's native
+`RenderTargetBitmap` after a short delay (default 3 s, override with
+`LVC_SCREENSHOT_DELAY_MS`) and exits. No external tooling, no DPI-scaling
+surprises, no race against the screenshot tool launching too early:
 
 ```bash
 LVC_SAMPLE=VisualTest/Issue<N>Repro \
@@ -165,11 +166,20 @@ compare to a control sample (often `Pies/Gauge1` or `General/FirstChart` for
 "what should this look like"). If the bug is subtle (a few pixels), make the
 repro larger (`Width=380`, `Height=380`) so it's clearly visible.
 
-**Fallback for MAUI/Uno or other-OS edge cases:** the Windows-only PrintWindow
-helper at `.claude/scripts/capture-window.ps1` captures any visible top-level
-window. macOS users can substitute `screencapture -l <window-id>`. Linux users
-have `grim` (Wayland) or `import` (ImageMagick on X11). Use these only when
-`LVC_SCREENSHOT` isn't supported on the target platform.
+**Fallback for MAUI/Uno or other-OS edge cases:** use the OS-appropriate
+helper script. They all take `<ProcessName> <OutPath> [WaitSeconds]` and
+poll for the target window before capturing:
+
+| OS      | Script                                       | Underlying tool                            |
+| ------- | -------------------------------------------- | ------------------------------------------ |
+| Windows | `.claude/scripts/capture-window.ps1`         | `PrintWindow` via Win32 (works occluded)   |
+| macOS   | `.claude/scripts/capture-window-macos.sh`    | `osascript` + `screencapture -l <id>`      |
+| Linux   | `.claude/scripts/capture-window-linux.sh`    | `xdotool`+`import` / `swaymsg`+`grim` / `gnome-screenshot` |
+
+The Linux script tries X11 → sway → GNOME in priority order; install the
+matching package if none are present (the script prints the apt/dnf hint).
+Use these only when `LVC_SCREENSHOT` isn't supported on the target platform
+(MAUI, Uno) — for Avalonia/WPF/WinUI prefer in-app capture.
 
 **B. Console logs for state/dataflow bugs** (binding doesn't fire, value
 doesn't propagate, event order is wrong):
@@ -309,16 +319,14 @@ needs. Don't re-document the code — just the insights.
 - **Auto-launch sample**: `LVC_SAMPLE=<path>` env var (Avalonia, WPF, WinUI,
   MAUI, Uno).
 - **In-app screenshot**: `LVC_SCREENSHOT=<path>` env var (Avalonia, WPF,
-  WinUI). Sample renders to PNG ~2 s after open and exits.
-- **External screenshot fallback** (Windows): `.claude/scripts/capture-window.ps1`
-  with `-ProcessName <name>` or `-WindowTitle <substring>`, `-OutPath <png>`.
-  Uses `PrintWindow`, so it works on occluded windows.
-- **macOS screenshot**: `screencapture -l $(/usr/sbin/screencapture -l? lookup
-  by app)`; or use `osascript` to bring window to front first then
-  `screencapture -o -t png -R<x,y,w,h> path`. Document the exact incantation
-  in a per-OS memory if you discover one that works reliably.
-- **Linux screenshot**: `grim -g "$(slurp)" out.png` (Wayland) or
-  `import -window <id> out.png` (X11).
+  WinUI). Sample renders to PNG after `LVC_SCREENSHOT_DELAY_MS` (default
+  3000) and exits.
+- **External screenshot fallback** — one script per OS, all take the same
+  `<ProcessName> <OutPath> [WaitSeconds]` shape:
+  - Windows: `.claude/scripts/capture-window.ps1` (also accepts
+    `-WindowTitle <substring>` instead of `-ProcessName`)
+  - macOS:   `.claude/scripts/capture-window-macos.sh`
+  - Linux:   `.claude/scripts/capture-window-linux.sh` (X11 / sway / GNOME)
 - Factos UI tests: `tests/UITests/`, set `appToRun` in `Program.cs` for
   local runs.
 - Build per-platform: `LiveCharts.<Platform>.slnx` solutions.
