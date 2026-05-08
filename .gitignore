@@ -345,3 +345,5 @@ samples/XamarinSample/XamarinSample/XamarinSample.Android/XamarinSample.Android.
 samples/XamarinSample/XamarinSample/XamarinSample.Android/Resources/Resource.designer.cs
 nuget.exe
 /.claude/settings.local.json
+/.claude/screenshots/
+/.claude/worktrees/
