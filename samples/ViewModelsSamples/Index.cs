@@ -122,6 +122,7 @@ public static class Index
         "VisualTest/TwoChartsOneSeries",
         "VisualTest/ReattachVisual",
         "VisualTest/DataTemplate",
+        "VisualTest/Issue1981",
         "VisualTest/Tabs",
 
         "Test/ChangeSeriesInstance",
