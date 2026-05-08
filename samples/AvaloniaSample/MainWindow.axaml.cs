@@ -26,9 +26,12 @@ public partial class MainWindow : Window
 
     private async Task CaptureAndExitAsync(string path)
     {
-        // Allow the chart's measure + initial animation frames to settle before
-        // capture. 2s is conservative — sample animations are typically ~700 ms.
-        await Task.Delay(2000);
+        // Wait for the chart's measure + initial animation frames to settle.
+        // The default series animation is 800 ms; some samples kick off async
+        // data loads (~1 s) before animating. 3 s leaves a margin for both,
+        // overridable via LVC_SCREENSHOT_DELAY_MS for slower machines or
+        // longer-loading samples.
+        await Task.Delay(GetDelayMs());
 
         try
         {
@@ -50,6 +53,12 @@ public partial class MainWindow : Window
         }
 
         await Dispatcher.UIThread.InvokeAsync(Close);
+    }
+
+    private static int GetDelayMs()
+    {
+        var raw = Environment.GetEnvironmentVariable("LVC_SCREENSHOT_DELAY_MS");
+        return int.TryParse(raw, out var ms) && ms > 0 ? ms : 3000;
     }
 
     private void InitializeComponent()

@@ -52,9 +52,10 @@ public sealed partial class MainWindow : Window
         if (_captured) return;
         _captured = true;
 
-        // Allow the chart's measure + initial animation frames to settle before
-        // capture. 2s is conservative — sample animations are typically ~700 ms.
-        await Task.Delay(2000);
+        // Wait for the chart's measure + initial animation frames to settle.
+        // See AvaloniaSample/MainWindow.axaml.cs for rationale (default 3s,
+        // override via LVC_SCREENSHOT_DELAY_MS for slower hosts).
+        await Task.Delay(GetDelayMs());
 
         try
         {
@@ -85,5 +86,11 @@ public sealed partial class MainWindow : Window
         }
 
         Close();
+    }
+
+    private static int GetDelayMs()
+    {
+        var raw = Environment.GetEnvironmentVariable("LVC_SCREENSHOT_DELAY_MS");
+        return int.TryParse(raw, out var ms) && ms > 0 ? ms : 3000;
     }
 }
