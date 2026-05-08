@@ -35,10 +35,18 @@ public partial class MainWindow : Window
 
         try
         {
+            // Bounds is in DIPs; scale by RenderScaling so the captured PNG
+            // matches on-screen pixels on HiDPI displays. Pass the same DPI to
+            // RenderTargetBitmap so its rendering uses the correct sub-pixel
+            // grid instead of producing a stretched/blurry capture. Window
+            // inherits TopLevel.RenderScaling, which reflects the active
+            // platform impl's scale.
+            var scaling = RenderScaling > 0 ? RenderScaling : 1.0;
             var size = new PixelSize(
-                Math.Max(1, (int)Bounds.Width),
-                Math.Max(1, (int)Bounds.Height));
-            var rtb = new RenderTargetBitmap(size);
+                Math.Max(1, (int)(Bounds.Width * scaling)),
+                Math.Max(1, (int)(Bounds.Height * scaling)));
+            var dpi = new Vector(96 * scaling, 96 * scaling);
+            using var rtb = new RenderTargetBitmap(size, dpi);
             rtb.Render(this);
 
             var fullPath = Path.GetFullPath(path);

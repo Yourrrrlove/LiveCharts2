@@ -54,9 +54,14 @@ public partial class MainWindow : Window
 
         try
         {
-            var w = (int)Math.Max(1, ActualWidth);
-            var h = (int)Math.Max(1, ActualHeight);
-            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            // ActualWidth/ActualHeight are in DIPs. Scale to physical pixels
+            // and pass the matching DPI to RenderTargetBitmap so the capture
+            // matches on-screen pixels on HiDPI displays instead of being
+            // stretched/blurry.
+            var dpi = VisualTreeHelper.GetDpi(this);
+            var w = (int)Math.Max(1, ActualWidth * dpi.DpiScaleX);
+            var h = (int)Math.Max(1, ActualHeight * dpi.DpiScaleY);
+            var rtb = new RenderTargetBitmap(w, h, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
             rtb.Render(this);
 
             var fullPath = Path.GetFullPath(path);
