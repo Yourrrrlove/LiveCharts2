@@ -72,7 +72,17 @@ public partial class MainWindow : Window
             encoder.Save(fs);
             Console.WriteLine($"[LVC_SCREENSHOT] saved {w}x{h} to {fullPath}");
         }
-        catch (Exception ex)
+        // Catch only the *expected* capture failure modes — file/path I/O,
+        // permission, invalid arguments, encoder state, native-side errors
+        // — and let truly unexpected exceptions (OOM, chart-engine bugs,
+        // etc.) propagate so CI sees a real stack trace.
+        catch (Exception ex) when (
+            ex is IOException                  // also covers DirectoryNotFound, PathTooLong, FileNotFound
+            or UnauthorizedAccessException
+            or ArgumentException               // also covers ArgumentNullException
+            or NotSupportedException
+            or InvalidOperationException
+            or System.Runtime.InteropServices.COMException)
         {
             Console.Error.WriteLine($"[LVC_SCREENSHOT] capture failed: {ex.Message}");
             Environment.ExitCode = 1;

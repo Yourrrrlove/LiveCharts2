@@ -54,7 +54,16 @@ public partial class MainWindow : Window
             rtb.Save(fullPath);
             Console.WriteLine($"[LVC_SCREENSHOT] saved {size.Width}x{size.Height} to {fullPath}");
         }
-        catch (Exception ex)
+        // Catch only the *expected* capture failure modes — file/path I/O,
+        // permission, invalid arguments, encoder state — and let truly
+        // unexpected exceptions (OOM, chart-engine bugs, etc.) propagate so
+        // CI sees a real stack trace instead of a quiet exit 1.
+        catch (Exception ex) when (
+            ex is IOException                  // also covers DirectoryNotFound, PathTooLong, FileNotFound
+            or UnauthorizedAccessException
+            or ArgumentException               // also covers ArgumentNullException
+            or NotSupportedException
+            or InvalidOperationException)
         {
             Console.Error.WriteLine($"[LVC_SCREENSHOT] capture failed: {ex.Message}");
             Environment.ExitCode = 1;
