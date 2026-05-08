@@ -38,7 +38,7 @@ the relevant memory file if uncertain — these are not optional:
   (`feedback_run_snapshots_for_render_changes`).
 - **Update docs when public API changes** in the same change set as a separate
   commit (`feedback_update_docs_for_api`).
-- Released version is **2.0.0** — never tell reporters "rc6 is latest" in
+- Check `Directory.Build.props` for `<LiveChartsVersion>` and use that value in
   user-facing text (`project_current_version`).
 
 ## Workflow
