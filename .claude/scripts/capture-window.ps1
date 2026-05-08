@@ -1,7 +1,8 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-    Captures the client area of a top-level window to a PNG.
+    Captures a top-level window (full window bounds, including non-client
+    chrome) to a PNG.
 
 .DESCRIPTION
     Used by the repro-and-fix skill to grab a snapshot of a running sample
@@ -89,7 +90,11 @@ function Resolve-WindowHandle {
     param([string]$Title, [string]$Process)
 
     if ($Title) {
-        $found = [IntPtr]::Zero
+        # The EnumWindows callback runs in the script scope, so use a single
+        # script-scoped slot to communicate the result. Reset on every call so
+        # we never return $null on a no-match or a stale handle from a prior
+        # invocation — the polling loop relies on Zero meaning "not yet".
+        $script:found = [IntPtr]::Zero
         $cb = [WinApi+EnumWindowsProc] {
             param($hWnd, $lParam)
             if (-not [WinApi]::IsWindowVisible($hWnd)) { return $true }
