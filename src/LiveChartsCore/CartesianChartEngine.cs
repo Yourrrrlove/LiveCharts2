@@ -172,7 +172,7 @@ public class CartesianChartEngine(
             foreach (var axis in YAxes)
                 ZoomAxis(axis, flags, pivot.Y, direction, scaleFactor);
 
-        _ = _zoommingDebouncer.Debounce(() => FitAllOnZoom(flags));
+        _zoommingDebouncer.Debounce(() => FitAllOnZoom(flags));
     }
 
     /// <summary>

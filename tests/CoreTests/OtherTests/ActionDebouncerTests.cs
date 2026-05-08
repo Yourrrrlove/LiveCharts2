@@ -33,7 +33,7 @@ public class ActionDebouncerTests
             // simulate ~10 wheel ticks within the debounce window
             for (var i = 0; i < 10; i++)
             {
-                _ = debouncer.Debounce(() => { });
+                debouncer.Debounce(() => { });
                 await Task.Delay(20);
             }
 
@@ -63,7 +63,7 @@ public class ActionDebouncerTests
         for (var i = 0; i < 5; i++)
         {
             var captured = i;
-            _ = debouncer.Debounce(() => ranIndex = captured);
+            debouncer.Debounce(() => ranIndex = captured);
             await Task.Delay(20);
         }
 

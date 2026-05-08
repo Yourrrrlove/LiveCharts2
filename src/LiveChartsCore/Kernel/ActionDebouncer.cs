@@ -22,28 +22,37 @@
 
 using System;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace LiveChartsCore.Kernel;
 
-internal class ActionDebouncer(TimeSpan delay)
+internal sealed class ActionDebouncer(TimeSpan delay)
 {
     private readonly TimeSpan _delay = delay;
-    private CancellationTokenSource? _cts;
+    private readonly object _gate = new();
+    private Timer? _timer;
+    private Action? _pending;
 
-    public async Task Debounce(Action action)
+    public void Debounce(Action action)
     {
-        _cts?.Cancel(false);
-        _cts = new CancellationTokenSource();
-        var token = _cts.Token;
-
-        try
+        lock (_gate)
         {
-            await Task.Delay(_delay, token);
-            if (!token.IsCancellationRequested)
-                action();
+            _pending = action;
+            if (_timer is null)
+                _timer = new Timer(OnTick, null, _delay, Timeout.InfiniteTimeSpan);
+            else
+                _ = _timer.Change(_delay, Timeout.InfiniteTimeSpan);
         }
-        catch (TaskCanceledException) { }
+    }
+
+    private void OnTick(object? state)
+    {
+        Action? action;
+        lock (_gate)
+        {
+            action = _pending;
+            _pending = null;
+        }
+        action?.Invoke();
     }
 }
 
