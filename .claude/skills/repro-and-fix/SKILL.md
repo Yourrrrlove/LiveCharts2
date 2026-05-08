@@ -22,6 +22,22 @@ If the user is asking about *theory* ("why does the gauge use a doughnut
 geometry?") or a *non-issue* task (refactor, doc update, perf), this skill is
 not the right tool — fall back to general workflow.
 
+## Pick the platform that matches the issue
+
+Read the issue's **labels** and **repro snippet** to choose. The workflow is
+the same on every XAML platform — only paths and launch commands change.
+
+| Platform | Sample dir                    | Launch project (Debug build)                                                | In-app screenshot |
+| -------- | ----------------------------- | --------------------------------------------------------------------------- | ----------------- |
+| Avalonia | `samples/AvaloniaSample/`     | `samples/AvaloniaSample/Platforms/AvaloniaSample.Desktop/.../*.Desktop.exe` | ✅ supported       |
+| WPF      | `samples/WPFSample/`          | `samples/WPFSample/.../WPFSample.exe`                                       | ✅ supported       |
+| WinUI    | `samples/WinUISample/WinUISample/` | `samples/WinUISample/WinUISample/.../WinUISample.exe`                  | ✅ supported       |
+| MAUI     | `samples/MauiSample/`         | per-platform; `dotnet build -t:Run -f net10.0-windows10.0.19041.0`          | ❌ use OS tool     |
+| Uno      | `samples/UnoPlatformSample/UnoPlatformSample/` | per-platform                                              | ❌ use OS tool     |
+
+If the issue is platform-agnostic (a core engine bug), prefer Avalonia for the
+fastest dev loop on Windows (no WindowsAppSDK / packaged-build overhead).
+
 ## Project conventions you must follow
 
 These are durable rules from `~/.claude/projects/.../memory/MEMORY.md`. Re-read
@@ -77,15 +93,15 @@ clean for other work.
 The repro convention is a **sample view inside the platform sample app**:
 
 ```
-samples/AvaloniaSample/VisualTest/Issue<N>Repro/View.axaml
-samples/AvaloniaSample/VisualTest/Issue<N>Repro/View.axaml.cs
+samples/<Platform>Sample/VisualTest/Issue<N>Repro/View.<axaml|xaml>
+samples/<Platform>Sample/VisualTest/Issue<N>Repro/View.<axaml|xaml>.cs
 ```
 
 Match the issue's repro setup as closely as you can — same `ControlTemplate`
 shape, same property values, same paints. *Don't simplify* until you've
 confirmed the bug fires; over-minimization can accidentally avoid the trigger.
 
-Existing repros to use as templates:
+Existing repros to mirror:
 
 - `samples/AvaloniaSample/VisualTest/Issue1986Repro/` — TabControl + ScrollViewer
 - `samples/AvaloniaSample/VisualTest/Issue1417Repro/` — GeoMap reattach
@@ -104,44 +120,56 @@ Add the new path to the sample selector:
 
 ### 4. Auto-launch the sample at your repro
 
-The platform sample apps read `LVC_SAMPLE` from the environment and load that
-sample on startup. Set it before launching:
+All XAML platform samples read `LVC_SAMPLE` at startup and load that sample
+instead of the default landing screen. Set it before launching:
 
 ```bash
+# bash / WSL
 LVC_SAMPLE=VisualTest/Issue<N>Repro \
   ./samples/AvaloniaSample/Platforms/AvaloniaSample.Desktop/bin/Debug/net10.0/AvaloniaSample.Desktop.exe
 ```
 
-Or for cross-platform:
-
-```bash
-# WPF
+```powershell
+# PowerShell
 $env:LVC_SAMPLE = "VisualTest/Issue<N>Repro"
-./samples/WPFSample/bin/Debug/net10.0-windows/WPFSample.exe
-
-# WinUI / MAUI / Uno: same pattern, env var set before launch
+.\samples\WPFSample\bin\Debug\net10.0-windows\WPFSample.exe
 ```
 
-Build first if needed: `dotnet build samples/AvaloniaSample/Platforms/AvaloniaSample.Desktop -c Debug`.
+Build first if needed: `dotnet build samples/<Platform>Sample/... -c Debug`.
 
 ### 5. Verify the bug yourself
 
 Two paths — pick based on the bug type:
 
-**A. Screenshot for visual bugs** (color, shape, position, rendering artifacts):
+**A. In-app screenshot for visual bugs** (color, shape, position, rendering
+artifacts). All XAML platform samples support `LVC_SCREENSHOT`: when set, the
+sample renders its main window via the framework's native `RenderTargetBitmap`
+~2 s after open and exits. No external tooling, no DPI-scaling surprises, and
+no race against the screenshot tool launching too early:
 
-```powershell
-# Run the app in background first (ensure it's the only AvaloniaSample.Desktop instance)
-.\.claude\scripts\capture-window.ps1 `
-    -ProcessName AvaloniaSample.Desktop `
-    -OutPath .\.claude\screenshots\<issue>-before.png `
-    -WaitSeconds 15
+```bash
+LVC_SAMPLE=VisualTest/Issue<N>Repro \
+LVC_SCREENSHOT=$(pwd)/.claude/screenshots/<N>-before.png \
+  ./samples/AvaloniaSample/Platforms/AvaloniaSample.Desktop/bin/Debug/net10.0/AvaloniaSample.Desktop.exe
 ```
 
-Then `Read` the PNG. You're multimodal — describe what you see, compare to a
-control sample (often `Pies/Gauge1` or `General/FirstChart` for "what should
-this look like"). If the bug is subtle (a few pixels), make the repro larger
-(`Width=380`, `Height=380`) so it's clearly visible.
+```powershell
+# PowerShell
+$env:LVC_SAMPLE = "VisualTest/Issue<N>Repro"
+$env:LVC_SCREENSHOT = "$pwd\.claude\screenshots\<N>-before.png"
+.\samples\WPFSample\bin\Debug\net10.0-windows\WPFSample.exe
+```
+
+After it exits, `Read` the PNG. You're multimodal — describe what you see,
+compare to a control sample (often `Pies/Gauge1` or `General/FirstChart` for
+"what should this look like"). If the bug is subtle (a few pixels), make the
+repro larger (`Width=380`, `Height=380`) so it's clearly visible.
+
+**Fallback for MAUI/Uno or other-OS edge cases:** the Windows-only PrintWindow
+helper at `.claude/scripts/capture-window.ps1` captures any visible top-level
+window. macOS users can substitute `screencapture -l <window-id>`. Linux users
+have `grim` (Wayland) or `import` (ImageMagick on X11). Use these only when
+`LVC_SCREENSHOT` isn't supported on the target platform.
 
 **B. Console logs for state/dataflow bugs** (binding doesn't fire, value
 doesn't propagate, event order is wrong):
@@ -153,17 +181,16 @@ Console.WriteLine($"[issue<N>] OnPropertyChanged: {change.Property.Name} old={ch
 ```
 
 The platform sample writes to stdout when launched from the terminal. Run via
-the bash tool with `run_in_background=true`, wait for the user to navigate (or
-your env var to land you on the repro), kill the app, then `grep` the
-captured output file. **Remove the diagnostics before committing.**
+the bash tool with `run_in_background=true` (no `LVC_SCREENSHOT` so the app
+stays open), wait a few seconds, kill the app, then `grep` the captured output
+file. **Remove the diagnostics before committing.**
 
-If neither approach decisively confirms the bug, escalate to the user:
+If neither approach decisively confirms the bug, escalate to the user with
+**one** well-framed question, not a chain of polling questions. Example:
 
-> "I can see X, but I'm not certain whether that matches the symptom you're
-> reporting. Can you confirm <specific question>?"
-
-Don't loop screenshot questions on the user — capture once, analyze, then
-proceed.
+> "The before-fix capture shows the gauge endcaps as flat, contrary to the
+> issue's screenshot. Did you toggle CornerRadius after the screenshot was
+> taken in the original report?"
 
 ### 6. Diagnose the root cause
 
@@ -198,17 +225,16 @@ won't reconstruct it from memory.
 
 ### 8. Verify the fix
 
-Re-run step 5 with the fix in place. Capture an "after" screenshot at the
-same path:
+Re-run step 5 with the fix in place. Capture an "after" screenshot at a
+sibling path and compare:
 
-```powershell
-.\.claude\scripts\capture-window.ps1 `
-    -ProcessName AvaloniaSample.Desktop `
-    -OutPath .\.claude\screenshots\<issue>-after.png
+```bash
+LVC_SAMPLE=VisualTest/Issue<N>Repro \
+LVC_SCREENSHOT=$(pwd)/.claude/screenshots/<N>-after.png \
+  ./samples/<Platform>Sample/.../<Platform>Sample.exe
 ```
 
-Read both images and confirm the symptom is gone. Don't claim the fix works
-without comparing.
+`Read` both images. Don't claim the fix works without comparing.
 
 ### 9. Write the regression test
 
@@ -217,7 +243,7 @@ Test choice depends on the bug nature:
 - **Programmatic state assertion** (the bug is in state propagation, not
   pixels): Factos test in `tests/SharedUITests/`. Navigate to the repro,
   query a helper method on the View that exposes the state under test,
-  assert. Gate by `#if AVALONIA_UI_TESTING` if Avalonia-specific (most
+  assert. Gate by `#if <PLATFORM>_UI_TESTING` if platform-specific (most
   XAML-platform-quirk bugs are).
 - **Pixel-perfect rendering**: snapshot test in `tests/SnapshotTests/`.
 - **Pure C# logic** (chart engine, motion, math): MSTest in
@@ -230,7 +256,8 @@ before committing.
 To run a single Factos UI test:
 
 ```bash
-# In tests/UITests/Program.cs, set: var appToRun = "avalonia-desktop";
+# In tests/UITests/Program.cs, set: var appToRun = "<platform>-desktop"
+# (avalonia-desktop / wpf-net10 / winui / maui / uno).
 dotnet build tests/UITests/UITests.csproj -c Debug
 cd tests/UITests/bin/Debug/net10.0 && dotnet UITests.dll
 # Revert the appToRun change before committing — it's a local dev-loop tweak.
@@ -279,10 +306,19 @@ needs. Don't re-document the code — just the insights.
 ## Tooling reference
 
 - Issue triage: `gh issue view <N> --repo Live-Charts/LiveCharts2`
-- Screenshot: `.claude/scripts/capture-window.ps1` (Windows; `-ProcessName`
-  or `-WindowTitle`, `-OutPath`)
-- Auto-launch sample: `LVC_SAMPLE=<path>` env var, supported by Avalonia,
-  WPF, WinUI, MAUI, Uno
+- **Auto-launch sample**: `LVC_SAMPLE=<path>` env var (Avalonia, WPF, WinUI,
+  MAUI, Uno).
+- **In-app screenshot**: `LVC_SCREENSHOT=<path>` env var (Avalonia, WPF,
+  WinUI). Sample renders to PNG ~2 s after open and exits.
+- **External screenshot fallback** (Windows): `.claude/scripts/capture-window.ps1`
+  with `-ProcessName <name>` or `-WindowTitle <substring>`, `-OutPath <png>`.
+  Uses `PrintWindow`, so it works on occluded windows.
+- **macOS screenshot**: `screencapture -l $(/usr/sbin/screencapture -l? lookup
+  by app)`; or use `osascript` to bring window to front first then
+  `screencapture -o -t png -R<x,y,w,h> path`. Document the exact incantation
+  in a per-OS memory if you discover one that works reliably.
+- **Linux screenshot**: `grim -g "$(slurp)" out.png` (Wayland) or
+  `import -window <id> out.png` (X11).
 - Factos UI tests: `tests/UITests/`, set `appToRun` in `Program.cs` for
-  local runs
-- Build per-platform: `LiveCharts.<Platform>.slnx` solutions
+  local runs.
+- Build per-platform: `LiveCharts.<Platform>.slnx` solutions.
