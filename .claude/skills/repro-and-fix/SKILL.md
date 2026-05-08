@@ -145,8 +145,11 @@ Two paths — pick based on the bug type:
 artifacts). Avalonia/WPF/WinUI samples support `LVC_SCREENSHOT`: when set,
 the sample renders its main window via the framework's native
 `RenderTargetBitmap` after a short delay (default 3 s, override with
-`LVC_SCREENSHOT_DELAY_MS`) and exits. No external tooling, no DPI-scaling
-surprises, no race against the screenshot tool launching too early:
+`LVC_SCREENSHOT_DELAY_MS`) and exits. No external tooling, no race against
+a screenshot tool launching too early. The capture is scaled to the
+window's physical pixels (`RenderScaling` on Avalonia,
+`VisualTreeHelper.GetDpi` on WPF) so HiDPI displays produce a sharp PNG
+that matches what's on screen:
 
 ```bash
 LVC_SAMPLE=VisualTest/Issue<N>Repro \

@@ -62,8 +62,10 @@ if [[ -z "$is_wayland" ]] && command -v xdotool >/dev/null && command -v import 
     exit 0
 fi
 
-if [[ -n "$is_wayland" ]] && command -v swaymsg >/dev/null && command -v grim >/dev/null; then
+if [[ -n "$is_wayland" ]] && command -v swaymsg >/dev/null && command -v grim >/dev/null && command -v jq >/dev/null; then
     # sway path: walk the tree, find the focused window matching the app_id.
+    # `jq` is required to query swaymsg JSON; if it's missing, fall through to
+    # gnome-screenshot (set -e would otherwise abort the whole script).
     deadline=$(( $(date +%s) + wait_seconds ))
     rect=""
     while [[ $(date +%s) -lt $deadline ]]; do
