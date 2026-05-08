@@ -1,7 +1,13 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Graphics.Imaging;
+using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace WinUISample;
 
@@ -21,6 +27,13 @@ public sealed partial class MainWindow : Window
             content.Content = Activator
                 .CreateInstance(null, $"WinUISample.{initial.Replace('/', '.')}.View")?
                 .Unwrap();
+
+        // Dev-loop hook: when LVC_SCREENSHOT is set, render the window to PNG
+        // shortly after activation and exit. Lets agents/scripts capture the
+        // rendered sample without external screenshot tooling.
+        var screenshotPath = Environment.GetEnvironmentVariable("LVC_SCREENSHOT");
+        if (!string.IsNullOrWhiteSpace(screenshotPath))
+            Activated += async (_, _) => await CaptureAndExitAsync(screenshotPath);
     }
 
     public string[] Samples { get; set; }
@@ -30,5 +43,47 @@ public sealed partial class MainWindow : Window
         if ((sender as FrameworkElement).DataContext is not string ctx) throw new Exception("Sample not found");
 
         content.Content = Activator.CreateInstance(null, $"WinUISample.{ctx.Replace('/', '.')}.View").Unwrap();
+    }
+
+    private bool _captured;
+    private async Task CaptureAndExitAsync(string path)
+    {
+        // Activated fires multiple times; only run once.
+        if (_captured) return;
+        _captured = true;
+
+        // Allow the chart's measure + initial animation frames to settle before
+        // capture. 2s is conservative — sample animations are typically ~700 ms.
+        await Task.Delay(2000);
+
+        try
+        {
+            var rtb = new RenderTargetBitmap();
+            await rtb.RenderAsync(grid);
+            var pixels = await rtb.GetPixelsAsync();
+
+            var fullPath = Path.GetFullPath(path);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+
+            var folder = await StorageFolder.GetFolderFromPathAsync(Path.GetDirectoryName(fullPath));
+            var file = await folder.CreateFileAsync(Path.GetFileName(fullPath), CreationCollisionOption.ReplaceExisting);
+            using var stream = await file.OpenAsync(FileAccessMode.ReadWrite);
+            var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+            encoder.SetPixelData(
+                BitmapPixelFormat.Bgra8,
+                BitmapAlphaMode.Premultiplied,
+                (uint)rtb.PixelWidth, (uint)rtb.PixelHeight,
+                96, 96,
+                pixels.ToArray());
+            await encoder.FlushAsync();
+            Console.WriteLine($"[LVC_SCREENSHOT] saved {rtb.PixelWidth}x{rtb.PixelHeight} to {fullPath}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[LVC_SCREENSHOT] capture failed: {ex.Message}");
+            Environment.ExitCode = 1;
+        }
+
+        Close();
     }
 }
