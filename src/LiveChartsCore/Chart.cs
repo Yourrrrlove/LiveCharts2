@@ -71,8 +71,8 @@ public abstract class Chart
     private long _lastMeasureTimeStamp = -1;
 
 #if NET5_0_OR_GREATER
-    private readonly bool _isMobile;
-    private bool _isTooltipCanceled;
+    internal bool _isMobile;
+    internal bool _isTooltipCanceled;
 #endif
 
     #endregion

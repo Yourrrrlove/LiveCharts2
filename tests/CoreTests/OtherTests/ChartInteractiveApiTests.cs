@@ -388,6 +388,46 @@ public class ChartInteractiveApiTests
             "Deadzone must not engage when ZoomMode has zoom flags but no pan flags.");
     }
 
+    [TestMethod]
+    public void PointerUp_OnDesktop_ClearsTooltipCanceledForHoverAfterPan()
+    {
+        // After deadzone engagement the tooltip is cancelled to avoid flicker
+        // during the pan; on desktop (incl. Mac Catalyst once correctly
+        // classified — see Chart.cs _isMobile) PointerUp must reset the flag so
+        // the next hover can re-show a tooltip. Without this branch the chart
+        // would lose tooltip-on-hover for the rest of its lifetime after the
+        // first click+pan.
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.Both);
+        core._isMobile = false;
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+        core.InvokePointerMove(new LvcPoint(120, 120));
+        core.InvokePointerUp(new LvcPoint(120, 120), isSecondaryAction: false);
+
+        Assert.IsFalse(
+            core._isTooltipCanceled,
+            "Desktop PointerUp must reset _isTooltipCanceled so post-pan hover can re-show tooltips.");
+    }
+
+    [TestMethod]
+    public void PointerUp_OnMobile_KeepsTooltipCanceledUntilNextPress()
+    {
+        // Mobile counterpart: with no hover, the tooltip stays cancelled until
+        // the next press resets it via InvokePointerDown. Locks down the
+        // deliberately-divergent mobile branch so a future refactor doesn't
+        // accidentally unify it with the desktop reset.
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.Both);
+        core._isMobile = true;
+
+        core.InvokePointerDown(new LvcPoint(100, 100), isSecondaryAction: false);
+        core.InvokePointerMove(new LvcPoint(120, 120));
+        core.InvokePointerUp(new LvcPoint(120, 120), isSecondaryAction: false);
+
+        Assert.IsTrue(
+            core._isTooltipCanceled,
+            "Mobile PointerUp must keep _isTooltipCanceled set so a stale tooltip can't reappear without a fresh press.");
+    }
+
     private static SKGeoMap CreateGeoMap(MapProjection projection = MapProjection.Mercator) =>
         new()
         {
