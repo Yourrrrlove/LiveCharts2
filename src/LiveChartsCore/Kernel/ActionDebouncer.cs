@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 using System;
+using System.Diagnostics;
 using System.Threading;
 
 namespace LiveChartsCore.Kernel;
@@ -64,7 +65,19 @@ internal sealed class ActionDebouncer(TimeSpan delay) : IDisposable
             action = _pending;
             _pending = null;
         }
-        action?.Invoke();
+
+        try
+        {
+            action?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            // OnTick runs on a ThreadPool thread; an unhandled throw here
+            // would terminate the process. Trace the exception (matching
+            // the pattern in Chart.UpdateThrottlerUnlocked from #1826) so
+            // listeners get a signal instead of a silent crash.
+            Trace.WriteLine($"[LiveCharts] debounced action failed: {ex}");
+        }
     }
 }
 
