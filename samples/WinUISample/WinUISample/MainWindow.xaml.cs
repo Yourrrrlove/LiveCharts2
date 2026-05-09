@@ -64,9 +64,11 @@ public sealed partial class MainWindow : Window
             var pixels = await rtb.GetPixelsAsync();
 
             var fullPath = Path.GetFullPath(path);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            var dir = Path.GetDirectoryName(fullPath)
+                ?? throw new ArgumentException($"LVC_SCREENSHOT path has no parent directory: {path}", nameof(path));
+            Directory.CreateDirectory(dir);
 
-            var folder = await StorageFolder.GetFolderFromPathAsync(Path.GetDirectoryName(fullPath));
+            var folder = await StorageFolder.GetFolderFromPathAsync(dir);
             var file = await folder.CreateFileAsync(Path.GetFileName(fullPath), CreationCollisionOption.ReplaceExisting);
             using var stream = await file.OpenAsync(FileAccessMode.ReadWrite);
             var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
