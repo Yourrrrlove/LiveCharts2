@@ -913,6 +913,7 @@ public class CartesianChartEngine(
         _sharedEvents = null;
         _zoomingSection = null;
         _isFirstDraw = true;
+        _zoommingDebouncer.Dispose();
     }
 
     private LvcPoint? _sectionZoomingStart = null;

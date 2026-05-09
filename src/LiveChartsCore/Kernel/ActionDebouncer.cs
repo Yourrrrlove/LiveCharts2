@@ -25,7 +25,7 @@ using System.Threading;
 
 namespace LiveChartsCore.Kernel;
 
-internal sealed class ActionDebouncer(TimeSpan delay)
+internal sealed class ActionDebouncer(TimeSpan delay) : IDisposable
 {
     private readonly TimeSpan _delay = delay;
     private readonly object _gate = new();
@@ -41,6 +41,18 @@ internal sealed class ActionDebouncer(TimeSpan delay)
                 _timer = new Timer(OnTick, null, _delay, Timeout.InfiniteTimeSpan);
             else
                 _ = _timer.Change(_delay, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    public void Dispose()
+    {
+        // Idempotent and revivable: if Debounce is called after Dispose (e.g.
+        // chart Load -> Unload -> Load), the next call creates a fresh Timer.
+        lock (_gate)
+        {
+            _timer?.Dispose();
+            _timer = null;
+            _pending = null;
         }
     }
 
