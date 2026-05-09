@@ -105,7 +105,6 @@ Existing repros to mirror:
 
 - `samples/AvaloniaSample/VisualTest/Issue1986Repro/` — TabControl + ScrollViewer
 - `samples/AvaloniaSample/VisualTest/Issue1417Repro/` — GeoMap reattach
-- `samples/AvaloniaSample/VisualTest/Issue2008Repro/` — Gauge ControlTemplate
 
 The View's code-behind should expose helpers that a Factos test can call
 (e.g. `FindTemplatedGaugeSeries()`). This is how the regression test hooks in
