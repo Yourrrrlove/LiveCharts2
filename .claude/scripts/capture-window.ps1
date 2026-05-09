@@ -165,6 +165,10 @@ finally {
     $gfx.Dispose()
 }
 
+$outDir = Split-Path -Parent $OutPath
+if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
+    New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+}
 $bmp.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
 
