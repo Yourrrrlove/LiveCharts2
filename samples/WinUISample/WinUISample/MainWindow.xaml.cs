@@ -59,7 +59,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var rtb = new RenderTargetBitmap();
+            using var rtb = new RenderTargetBitmap();
             await rtb.RenderAsync(grid);
             var pixels = await rtb.GetPixelsAsync();
 
