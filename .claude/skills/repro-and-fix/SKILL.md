@@ -11,6 +11,11 @@ you build the repro, launch the sample at that repro automatically, verify the
 bug yourself (screenshot or logs), fix it, verify the fix, and commit. Don't
 ask the user for visual confirmations you can get yourself.
 
+> **Shared with Copilot Coding Agent.** `.github/copilot-instructions.md` links
+> here as the canonical issue → reproduce → fix → PR workflow. Edit this file
+> when changing the workflow; keep the Copilot doc as a thin pointer to avoid
+> drift.
+
 ## When this skill applies
 
 - "Let's work on https://github.com/Live-Charts/LiveCharts2/issues/N"
