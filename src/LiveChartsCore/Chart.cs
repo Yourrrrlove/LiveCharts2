@@ -102,7 +102,12 @@ public abstract class Chart
 
 #if NET5_0_OR_GREATER
 
-        _isMobile = OperatingSystem.IsOSPlatform("Android") || OperatingSystem.IsOSPlatform("iOS");
+        // Mac Catalyst reports as iOS via OperatingSystem.IsOSPlatform("iOS") but is
+        // a desktop UX (hover, cursor, click). Treating it as mobile would cause
+        // InvokePointerUp to leave _isTooltipCanceled set, blocking hover-after-pan
+        // tooltips for the rest of the chart's lifetime.
+        _isMobile = OperatingSystem.IsOSPlatform("Android")
+                    || (OperatingSystem.IsOSPlatform("iOS") && !OperatingSystem.IsMacCatalyst());
 
 #endif
     }
