@@ -379,7 +379,7 @@ public abstract class Chart
     /// Invokes the pointer down event.
     /// </summary>
     /// <param name="point">The pointer position.</param>
-    /// <param name="isSecondaryAction">Flags the action as secondary (normally rigth click or double tap on mobile)</param>
+    /// <param name="isSecondaryAction">Flags the action as secondary (normally right click or double tap on mobile)</param>
     protected internal virtual void InvokePointerDown(LvcPoint point, bool isSecondaryAction)
     {
         _isPointerDown = true;
@@ -481,7 +481,7 @@ public abstract class Chart
     /// Invokes the pointer up event.
     /// </summary>
     /// <param name="point">The pointer position.</param>
-    /// <param name="isSecondaryAction">Flags the action as secondary (normally rigth click or double tap on mobile)</param>
+    /// <param name="isSecondaryAction">Flags the action as secondary (normally right click or double tap on mobile)</param>
     protected internal virtual void InvokePointerUp(LvcPoint point, bool isSecondaryAction)
     {
         _isPointerDown = false;
