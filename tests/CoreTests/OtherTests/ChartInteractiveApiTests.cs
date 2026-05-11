@@ -388,6 +388,10 @@ public class ChartInteractiveApiTests
             "Deadzone must not engage when ZoomMode has zoom flags but no pan flags.");
     }
 
+#if NET5_0_OR_GREATER
+    // _isMobile/_isTooltipCanceled live behind #if NET5_0_OR_GREATER in Chart.cs;
+    // net462 has no mobile target so the desktop/mobile tooltip-reset distinction
+    // is moot there.
     [TestMethod]
     public void PointerUp_OnDesktop_ClearsTooltipCanceledForHoverAfterPan()
     {
@@ -427,6 +431,7 @@ public class ChartInteractiveApiTests
             core._isTooltipCanceled,
             "Mobile PointerUp must keep _isTooltipCanceled set so a stale tooltip can't reappear without a fresh press.");
     }
+#endif
 
     [TestMethod]
     public void PointerDown_SeedsTooltipDrawState()
