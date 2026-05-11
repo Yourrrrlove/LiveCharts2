@@ -428,6 +428,27 @@ public class ChartInteractiveApiTests
             "Mobile PointerUp must keep _isTooltipCanceled set so a stale tooltip can't reappear without a fresh press.");
     }
 
+    [TestMethod]
+    public void PointerDown_SeedsTooltipDrawState()
+    {
+        // Cross-platform tap-to-tooltip: a press alone must seed _pointerPosition
+        // and _isPointerIn so DrawToolTip doesn't bail on an early null-position
+        // check, otherwise platforms whose press doesn't emit a synthetic Move
+        // (iOS UILongPressGestureRecognizer fires Began -> Ended with no Changed
+        // when the finger doesn't move) never open a tooltip on a static tap —
+        // a pre-existing inconsistency vs Android, which fires Move alongside
+        // Down. Without these seeds the throttler call added at the end of
+        // InvokePointerDown runs DrawToolTip on stale (-10, -10) / !_isPointerIn
+        // state and renders nothing.
+        var (_, _, _, core) = CreatePinnedChart(ZoomAndPanMode.Both);
+
+        core.InvokePointerDown(new LvcPoint(123, 45), isSecondaryAction: false);
+
+        Assert.AreEqual(123f, core._pointerPosition.X, "PointerDown must seed _pointerPosition.X to the press point.");
+        Assert.AreEqual(45f, core._pointerPosition.Y, "PointerDown must seed _pointerPosition.Y to the press point.");
+        Assert.IsTrue(core._isPointerIn, "PointerDown must set _isPointerIn so DrawToolTip can paint on a static tap.");
+    }
+
     private static SKGeoMap CreateGeoMap(MapProjection projection = MapProjection.Mercator) =>
         new()
         {
