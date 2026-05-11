@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 
 namespace AvaloniaSample;
 
@@ -10,6 +11,13 @@ public class MainWindowViewModel : INotifyPropertyChanged
             ViewModelsSamples.Index.Samples,
             "VisualTest/Issue1986Repro"
         ];
+
+        // Dev-loop hook: LVC_SAMPLE selects an initial sample by path
+        // (e.g. LVC_SAMPLE=VisualTest/Issue1986Repro). Lets agents/scripts
+        // launch the app pointed at a specific repro without UI navigation.
+        var initial = Environment.GetEnvironmentVariable("LVC_SAMPLE");
+        if (!string.IsNullOrWhiteSpace(initial) && Array.IndexOf(Samples, initial) >= 0)
+            SelectedSample = initial;
     }
 
     public string[] Samples { get; set; }
