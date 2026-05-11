@@ -384,6 +384,12 @@ public abstract class Chart
     {
         _isPointerDown = true;
         _pointerPreviousPanningPosition = point;
+        // Seed _pointerPosition/_isPointerIn so the tooltip throttler called below
+        // can draw at the press location even on platforms whose press doesn't
+        // emit a synthetic Move (iOS UILongPressGestureRecognizer fires Began→Ended
+        // with no Changed when the finger doesn't move).
+        _pointerPosition = point;
+        _isPointerIn = true;
 
         lock (Canvas.Sync)
         {
@@ -425,6 +431,11 @@ public abstract class Chart
 
         // experimental events from the chart engine.
         PointerDown?.Invoke(this, point);
+
+        // Render the tooltip on press so a static tap opens it on every platform,
+        // not only platforms whose native press also emits a Move (Android does,
+        // iOS does not — see _pointerPosition seed above).
+        _tooltipThrottler.Call();
     }
 
     /// <summary>
