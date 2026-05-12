@@ -65,6 +65,17 @@
     <HasOS>true</HasOS>
   </PropertyGroup>
 
+  <!--
+  Defined for any project whose own UnoFeatures includes SkiaRenderer, i.e.
+  this build path uses Uno's Skia rendering pipeline instead of native XAML.
+  Used by shared tests / shared sources to skip code that depends on a native
+  hardware-accelerated XAML element (e.g. SKXamlCanvas with GL backing), which
+  doesn't exist under Uno-Skia.
+  -->
+  <PropertyGroup Condition="'$(UnoFeatures)' != '' and $(UnoFeatures.Contains('SkiaRenderer'))">
+    <DefineConstants>$(DefineConstants);LVC_UNO_SKIA</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup Condition="$(DebugCodeGeneration)">
     <DefineConstants>$(DefineConstants);DEBUG_CODE_GENERATION</DefineConstants>
   </PropertyGroup>

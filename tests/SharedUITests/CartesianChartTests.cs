@@ -158,8 +158,16 @@ public class CartesianChartTests
     }
 #endif
 
-#if (WPF_UI_TESTING && TEST_HA_VIEWS) || MAUI_UI_TESTING || WINUI_UI_TESTING || (UNO_UI_TESTING && HAS_OS_LVC)
-    // native platforms where gpu is supported
+#if (WPF_UI_TESTING && TEST_HA_VIEWS) || MAUI_UI_TESTING || WINUI_UI_TESTING || (UNO_UI_TESTING && HAS_OS_LVC && !LVC_UNO_SKIA)
+    // native platforms where gpu is supported.
+    //
+    // The Uno arm of this gate excludes builds with the Uno SkiaRenderer
+    // feature enabled: under Uno-Skia the chart renders through
+    // Uno.WinUI.Graphics2DSK's SKCanvasElement (no native XAML
+    // hardware-accelerated element), so RendererName never contains "GPU"
+    // and this test can't satisfy the assertion. HAS_OS_LVC alone is the
+    // wrong signal for "GPU is available" now that Uno-Skia is the common
+    // setup on mobile.
 
     [AppTestMethod]
     public async Task ShouldLoadHardwareAcceleratedView()
