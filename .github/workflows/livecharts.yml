@@ -391,6 +391,9 @@ jobs:
           - id: uno
             tf: net10.0-android
             workloads: android
+          - id: uno-native
+            tf: net10.0-android
+            workloads: android
     needs: [pack, prepare]
     steps:
       - name: Checkout

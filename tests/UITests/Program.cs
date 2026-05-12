@@ -98,6 +98,7 @@ TestRecord[] toTest = [
     new($"{root}/MauiSample",                   "maui-ios",             [..iphoneBuild, tf_var, new("RuntimeIdentifier", "iossimulator-arm64")]),
 
     new($"{root}/{unoDir}",                     "uno",                  [..msBuildArgs, tf_var]),
+    new($"{root}/{unoDir}",                     "uno-native",           [..msBuildArgs, tf_var, new("LiveChartsUnoUseSkiaRenderer", "false")]),
 
     new($"{root}/WinUISample/WinUISample",      "winui",                winUIArgs),
     new($"{root}/EtoFormsSample",               "eto",                  msBuildArgs),
