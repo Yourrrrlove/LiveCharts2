@@ -22,15 +22,6 @@
           https://aka.platform.uno/singleproject-features
         -->
 
-        <!--
-          LiveChartsUnoUseSkiaRenderer toggles the SkiaRenderer Uno feature so CI can
-          exercise both the Uno-Skia and Uno-Native rendering pipelines from a single
-          sample project. Default true: local dev / IDE matches the shipped sample.
-          CI flips it to false for the uno-native matrix entry.
-        -->
-        <LiveChartsUnoUseSkiaRenderer Condition="'$(LiveChartsUnoUseSkiaRenderer)' == ''">true</LiveChartsUnoUseSkiaRenderer>
-        <LiveChartsUnoSkiaFeature Condition="'$(LiveChartsUnoUseSkiaRenderer)' != 'false'">SkiaRenderer;</LiveChartsUnoSkiaFeature>
-
         <UnoFeatures>
             Material;
             Dsp;
@@ -44,7 +35,7 @@
             Localization;
             Navigation;
             ThemeService;
-            $(LiveChartsUnoSkiaFeature)
+            SkiaRenderer;
         </UnoFeatures>
 
         <NoWarn>$(NoWarn);MSB4240</NoWarn>
