@@ -713,9 +713,13 @@ Quick reference for the dev-loop hooks the workflow relies on:
 - **`LVC_SCREENSHOT_DELAY_MS=<ms>`** — overrides the 3 s default settle delay before the in-app screenshot is taken (use on slower CI hosts).
 - **`.claude/scripts/capture-window.{ps1,-macos.sh,-linux.sh}`** — per-OS PrintWindow / `screencapture` / `grim` fallbacks for platforms without an in-app capture path (MAUI, Uno).
 
-Repro views live under `samples/AvaloniaSample/VisualTest/Issue<N>Repro/` and are
-registered in `samples/ViewModelsSamples/Index.cs`. Their code-behind exposes
-helpers (e.g. `FindTemplatedGaugeSeries()`) that Factos UI tests call directly.
+Repro views live under `samples/AvaloniaSample/VisualTest/Issue<N>Repro/` (or
+the equivalent under whichever platform sample fits the bug). Their code-behind
+exposes helpers (e.g. `FindTemplatedGaugeSeries()`) that Factos UI tests call
+directly. Factos and `LVC_SAMPLE` navigate by path and don't need the repro
+registered in `samples/ViewModelsSamples/Index.cs` — **do not commit changes
+to that file for a repro view.** It's shared across every platform sample,
+so a single-platform repro entry will crash the load on the other platforms.
 
 ## Resources
 
