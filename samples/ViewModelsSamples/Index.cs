@@ -123,6 +123,7 @@ public static class Index
         "VisualTest/ReattachVisual",
         "VisualTest/DataTemplate",
         "VisualTest/Tabs",
+        "VisualTest/Issue2131Repro",
 
         "Test/ChangeSeriesInstance",
         "Test/Dispose",

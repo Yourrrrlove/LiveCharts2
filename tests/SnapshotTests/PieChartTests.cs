@@ -181,6 +181,46 @@ public sealed class PieChartTests
         chart.AssertSnapshotMatches($"{nameof(PieChartTests)}_{nameof(GaugeMultiple)}");
     }
 
+    [TestMethod]
+    public void GaugeInTightBounds()
+    {
+        // issue #2131 (re-open): with a small chart size (~110px), the default
+        // HoverPushout=20 on every PieSeries had each gauge subtract 40px from the
+        // available diameter via PushoutBounds. That pushed the user's requested
+        // InnerRadius outside the chart's available radius, collapsing the rendered
+        // ring to a 1px sliver positioned at the wrong radius. Gauges never pop out
+        // on hover, so they no longer contribute to PushoutBounds — the ring now
+        // honors InnerRadius + MaxRadialColumnWidth exactly the same as in a roomy
+        // chart, just scaled down.
+        var chart = new SKPieChart
+        {
+            Series = GaugeGenerator.BuildSolidGauge(
+                new GaugeItem(
+                    100,
+                    series =>
+                    {
+                        series.InnerRadius = 38;
+                        series.RelativeInnerRadius = -4;
+                        series.MaxRadialColumnWidth = 5;
+                    }),
+                new GaugeItem(GaugeItem.Background, series =>
+                {
+                    series.InnerRadius = 40;
+                    series.RelativeInnerRadius = 4;
+                    series.OuterRadiusOffset = -20;
+                    series.MaxRadialColumnWidth = 5;
+                })),
+            InitialRotation = 270,
+            MaxAngle = 360,
+            MinValue = 0,
+            MaxValue = 100,
+            Width = 110,
+            Height = 110
+        };
+
+        chart.AssertSnapshotMatches($"{nameof(PieChartTests)}_{nameof(GaugeInTightBounds)}");
+    }
+
     public static void SetStyle(string name, PieSeries<ObservableValue> series)
     {
         series.Name = name;
