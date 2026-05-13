@@ -131,7 +131,12 @@ public static class ThemesExtensions
                     })
                     .HasRuleForLineSeries(lineSeries =>
                     {
-                        var color = theme.GetSeriesColor(lineSeries).AsSKColor();
+                        // Honor a user-set Stroke as the series identity color so the
+                        // legend miniature and marker geometries match the line color.
+                        // See #2064.
+                        var color = lineSeries.Stroke is SolidColorPaint userStroke
+                            ? userStroke.Color
+                            : theme.GetSeriesColor(lineSeries).AsSKColor();
 
                         lineSeries.GeometrySize = 12;
                         lineSeries.GeometryStroke = new SolidColorPaint(color, 4);
@@ -151,7 +156,9 @@ public static class ThemesExtensions
                     })
                     .HasRuleForStepLineSeries(steplineSeries =>
                     {
-                        var color = theme.GetSeriesColor(steplineSeries).AsSKColor();
+                        var color = steplineSeries.Stroke is SolidColorPaint userStroke
+                            ? userStroke.Color
+                            : theme.GetSeriesColor(steplineSeries).AsSKColor();
 
                         steplineSeries.GeometrySize = 12;
                         steplineSeries.GeometryStroke = new SolidColorPaint(color, 4);
@@ -280,7 +287,9 @@ public static class ThemesExtensions
                     })
                     .HasRuleForPolarLineSeries(polarLine =>
                     {
-                        var color = theme.GetSeriesColor(polarLine).AsSKColor();
+                        var color = polarLine.Stroke is SolidColorPaint userStroke
+                            ? userStroke.Color
+                            : theme.GetSeriesColor(polarLine).AsSKColor();
 
                         polarLine.GeometrySize = 12;
                         polarLine.GeometryStroke = new SolidColorPaint(color, 4);
