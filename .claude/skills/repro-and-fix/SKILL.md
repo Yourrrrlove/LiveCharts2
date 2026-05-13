@@ -239,28 +239,14 @@ Common gotchas in this codebase:
 - **Motion properties animate from a stale "from" value.** A value flip from
   N→0 may render N for one frame.
 
-### 7. Apply the fix
+### 7. Write the regression test first
 
-Smallest possible change. Don't refactor surrounding code. Don't add
-comments unless the WHY is non-obvious — but if the bug is a subtle
-interaction (Avalonia behavior, theme precedence, source-gen quirk), a comment
-explaining *why this fix is necessary* is warranted because future readers
-won't reconstruct it from memory.
-
-### 8. Verify the fix
-
-Re-run step 5 with the fix in place. Capture an "after" screenshot at a
-sibling path and compare:
-
-```bash
-LVC_SAMPLE=VisualTest/Issue<N>Repro \
-LVC_SCREENSHOT=$(pwd)/.claude/screenshots/<N>-after.png \
-  ./samples/<Platform>Sample/.../<Platform>Sample.exe
-```
-
-`Read` both images. Don't claim the fix works without comparing.
-
-### 9. Write the regression test
+Test-first: by the end of step 6 you understand the root cause and the
+observable that would catch a regression. Write the test now, *before*
+applying the fix, and run it — it must fail for the right reason. A test
+written after the fix risks passing against both versions of the code; a
+test that fails first proves it's gated on the broken behavior, and you
+skip the awkward "comment out the fix, rebuild, re-run" verification dance.
 
 Test choice depends on the bug nature:
 
@@ -273,9 +259,10 @@ Test choice depends on the bug nature:
 - **Pure C# logic** (chart engine, motion, math): MSTest in
   `tests/CoreTests/`.
 
-**Verify the test fails without the fix.** Comment out your fix, rebuild,
-re-run the test. Expect it to fail with a meaningful error. Restore the fix
-before committing.
+Run the test and confirm the failure message matches the symptom you saw in
+step 5 — not, for example, a setup error or NullRef from missing test
+infrastructure. If it fails for an unrelated reason, the test isn't yet
+catching the bug; fix the test before moving on.
 
 To run a single Factos UI test:
 
@@ -287,14 +274,46 @@ cd tests/UITests/bin/Debug/net10.0 && dotnet UITests.dll
 # Revert the appToRun change before committing — it's a local dev-loop tweak.
 ```
 
+### 8. Apply the fix
+
+Smallest possible change. Don't refactor surrounding code. Don't add
+comments unless the WHY is non-obvious — but if the bug is a subtle
+interaction (Avalonia behavior, theme precedence, source-gen quirk), a comment
+explaining *why this fix is necessary* is warranted because future readers
+won't reconstruct it from memory.
+
+### 9. Verify the fix
+
+Re-run the failing test from step 7 — it must now pass. Then re-run step 5
+with the fix in place to capture an "after" screenshot at a sibling path and
+compare visually:
+
+```bash
+LVC_SAMPLE=VisualTest/Issue<N>Repro \
+LVC_SCREENSHOT=$(pwd)/.claude/screenshots/<N>-after.png \
+  ./samples/<Platform>Sample/.../<Platform>Sample.exe
+```
+
+`Read` both images. Don't claim the fix works without comparing. The test
+passing is necessary but not sufficient for visual bugs — pixel-equivalent
+output can still look subtly wrong if the assertion was too narrow.
+
 ### 10. Commit and PR
 
-Two commits, in this order:
+You developed test-first, but commit fix-first. Two commits, in this order:
 
 1. `fix(<scope>): <one-line summary> (#<N>)` — only the fix.
 2. `test(<scope>): regression for <symptom> (#<N>)` — only the test +
    repro view. Do not stage `samples/ViewModelsSamples/Index.cs`; see step 3
    for why.
+
+Why fix-first commit order despite test-first development: every commit on
+the branch should be individually green so `git bisect` lands on a usable
+state. If the test commit landed first it would be a failing-test commit
+that bisect would (correctly) flag as broken. Fix-then-test keeps both
+commits green while still satisfying the project rule that reverting the
+fix must surface the regression — revert commit 1 alone and the test from
+commit 2 fails.
 
 Commit message style follows recent history (`git log --oneline -10`).
 Body: imperative, mention the root-cause mechanism, why the test catches it.
@@ -320,8 +339,10 @@ needs. Don't re-document the code — just the insights.
   question, you haven't framed the question precisely enough.
 - **Simplifying the repro before confirming.** A "minimal" repro that doesn't
   trigger the bug is worse than a verbose one that does.
-- **Skipping the test-fails-without-fix verification.** A passing test that
-  also passes when reverted proves nothing.
+- **Writing the test after the fix.** Develop test-first (step 7 before
+  step 8) so the failure is real and you don't have to comment out the fix
+  to verify the test catches anything. A test authored against
+  already-fixed code can pass for the wrong reason.
 - **Mixing fix + test + cleanup in one commit.** Project policy is strict
   here — every fix needs a separately revertible test commit.
 - **Force-pushing for "cleanliness".** Never. Stack new commits.
