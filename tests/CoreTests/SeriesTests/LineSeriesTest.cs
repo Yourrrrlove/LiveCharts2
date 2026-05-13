@@ -532,4 +532,34 @@ public class LineSeriesTest
         AssertIsStraightLine(points);
         Assert.IsTrue(segments == 5);
     }
+
+    [TestMethod]
+    public void MarkerColorMatchesUserStroke()
+    {
+        // Regression for #2064: when the user sets Stroke explicitly, the legend
+        // miniature and per-point marker should match the line color. The default
+        // theme used to rotate GeometryStroke from the palette by SeriesId, so a
+        // user-set blue/green/red line ended up with palette-rotated marker dots,
+        // giving each series two different identifying colors.
+
+        var blue = new SKColor(0, 0, 255);
+        var green = new SKColor(0, 128, 0);
+        var red = new SKColor(255, 0, 0);
+
+        var s0 = new LineSeries<int> { Values = [1, 2, 3], Stroke = new SolidColorPaint(blue) };
+        var s1 = new LineSeries<int> { Values = [1, 2, 3], Stroke = new SolidColorPaint(green) };
+        var s2 = new LineSeries<int> { Values = [1, 2, 3], Stroke = new SolidColorPaint(red) };
+
+        var chart = new SKCartesianChart
+        {
+            Width = 400,
+            Height = 400,
+            Series = [s0, s1, s2]
+        };
+        _ = chart.GetImage();
+
+        Assert.AreEqual(blue, ((SolidColorPaint)s0.GeometryStroke!).Color);
+        Assert.AreEqual(green, ((SolidColorPaint)s1.GeometryStroke!).Color);
+        Assert.AreEqual(red, ((SolidColorPaint)s2.GeometryStroke!).Color);
+    }
 }
