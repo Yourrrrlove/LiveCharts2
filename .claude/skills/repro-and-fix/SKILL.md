@@ -115,12 +115,19 @@ The View's code-behind should expose helpers that a Factos test can call
 (e.g. `FindTemplatedGaugeSeries()`). This is how the regression test hooks in
 without going through the visual tree.
 
-Add the new path to the sample selector:
+**Do not commit changes to `samples/ViewModelsSamples/Index.cs` for repro
+views.** Factos navigates to a sample by path via `LVC_SAMPLE` regardless of
+whether the path is listed in the index, and the index is shared across every
+platform sample. If you add `VisualTest/Issue<N>Repro` there and the view only
+exists in `samples/AvaloniaSample/`, every other platform sample (WPF, MAUI,
+WinUI, Uno) will throw when it loads the index. Leave the file untouched on
+your branch.
 
-```csharp
-// samples/ViewModelsSamples/Index.cs
-"VisualTest/Issue<N>Repro",
-```
+If it's genuinely easier for your *local* dev loop to pick the repro from the
+sample selector dropdown rather than via `LVC_SAMPLE`, edit `Index.cs`
+temporarily — but revert it before committing. `git restore
+samples/ViewModelsSamples/Index.cs` before each commit, or just don't stage
+the file.
 
 ### 4. Auto-launch the sample at your repro
 
@@ -286,7 +293,8 @@ Two commits, in this order:
 
 1. `fix(<scope>): <one-line summary> (#<N>)` — only the fix.
 2. `test(<scope>): regression for <symptom> (#<N>)` — only the test +
-   repro view + index entry.
+   repro view. Do not stage `samples/ViewModelsSamples/Index.cs`; see step 3
+   for why.
 
 Commit message style follows recent history (`git log --oneline -10`).
 Body: imperative, mention the root-cause mechanism, why the test catches it.
