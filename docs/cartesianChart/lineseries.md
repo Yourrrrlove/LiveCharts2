@@ -98,7 +98,8 @@ a look at the [Paints article]({{ website_url }}/docs/{{ platform }}/{{ version 
 
 The geometry is the circle shape (by default) that the line series draws for every point, you can customize
 the fill and stroke of this shape, if none of these properties are set then LiveCharts will create them based on 
-the series position in your series collection and the current theme.
+the series position in your series collection and the current theme. When `Stroke` is explicitly set to a
+`SolidColorPaint`, `GeometryStroke` inherits that color so the marker matches the line.
 
 ![image](https://raw.githubusercontent.com/beto-rodriguez/LiveCharts2/master/docs/_assets/geometrystrokefill.png)
 
