@@ -280,4 +280,93 @@ public class Issue2159ZoomLimitsTests
             $"Pan must clamp to the data-bounds rail; a runaway pan would put " +
             $"MaxLimit far past the ~9 data max, got {max}.");
     }
+
+    // ----------------------------------------------------------------------
+    // Shared-axes coverage (PR #2240 review).
+    //
+    // SharedAxes.Set keeps a group of axes' view limits in sync, and
+    // CoreAxis.GetLimits() already aggregates Min/Max/DataMin/DataMax across
+    // the SharedWith group. The user pin (UserSetMin/UserSetMax) must be
+    // aggregated the same way — otherwise a zoom started from an UNPINNED
+    // shared axis falls back to the ~data range as its outer rail, and
+    // SetLimits then propagates that collapse onto a pinned sibling.
+    // ----------------------------------------------------------------------
+
+    // Two charts whose X axes are a shared group: chart 1's X is pinned
+    // wider than the data ([0, 180]), chart 2's X is unpinned. Both charts
+    // carry the same 10-point series (X data ≈ [0, 9]).
+    private static (Axis pinnedX, CartesianChartEngine unpinnedCore) CreateSharedPinnedAndUnpinnedCharts()
+    {
+        var pinnedX = new Axis { MinLimit = 0, MaxLimit = 180, MinStep = 10 };
+        var unpinnedX = new Axis();
+
+        SharedAxes.Set(pinnedX, unpinnedX);
+
+        var pinnedChart = new SKCartesianChart
+        {
+            Width = 800,
+            Height = 400,
+            ZoomMode = ZoomAndPanMode.Both,
+            XAxes = [pinnedX],
+            YAxes = [new Axis()],
+            Series =
+            [
+                new LineSeries<double>
+                {
+                    Values = [10d, 50d, 30d, 80d, 20d, 60d, 40d, 70d, 35d, 55d]
+                }
+            ]
+        };
+        var unpinnedChart = new SKCartesianChart
+        {
+            Width = 800,
+            Height = 400,
+            ZoomMode = ZoomAndPanMode.Both,
+            XAxes = [unpinnedX],
+            YAxes = [new Axis()],
+            Series =
+            [
+                new LineSeries<double>
+                {
+                    Values = [10d, 50d, 30d, 80d, 20d, 60d, 40d, 70d, 35d, 55d]
+                }
+            ]
+        };
+
+        _ = pinnedChart.GetImage();
+        _ = unpinnedChart.GetImage();
+
+        return (pinnedX, (CartesianChartEngine)unpinnedChart.CoreChart);
+    }
+
+    [TestMethod]
+    public void ZoomFromUnpinnedSharedAxis_DoesNotCollapsePinnedSibling()
+    {
+        // The wheel zoom-out happens on the chart whose shared axis is NOT
+        // pinned. GetLimits() must still surface the sibling's pin as the
+        // outer rail; before the fix it aggregated Min/Max/DataMin/DataMax
+        // across SharedWith but not UserSetMin/UserSetMax, so the unpinned
+        // axis fell back to the ~9 data range and SetLimits propagated that
+        // collapse back onto the pinned sibling.
+        var (pinnedX, unpinnedCore) = CreateSharedPinnedAndUnpinnedCharts();
+        var pivot = new LvcPoint(400, 200);
+
+        var rangeBefore = pinnedX.MaxLimit!.Value - pinnedX.MinLimit!.Value; // 180
+
+        unpinnedCore.Zoom(ZoomAndPanMode.Both, pivot, ZoomDirection.ZoomOut);
+
+        var minAfter = pinnedX.MinLimit!.Value;
+        var maxAfter = pinnedX.MaxLimit!.Value;
+        var rangeAfter = maxAfter - minAfter;
+
+        Assert.IsTrue(rangeAfter > rangeBefore,
+            $"Zoom-out from an unpinned shared axis must grow — not collapse — the " +
+            $"pinned sibling's view; before={rangeBefore}, after={rangeAfter}.");
+        // The pin [0, 180] must stay within view: a zoom-out only grows it.
+        // Pre-fix the sibling collapsed toward the ~9 data range, leaving
+        // MaxLimit far below 180.
+        Assert.IsTrue(maxAfter >= 180 - 1e-6 && minAfter <= 0 + 1e-6,
+            $"Zoom-out from an unpinned shared axis must keep the pinned sibling's " +
+            $"[0, 180] pin within view; got X=[{minAfter}, {maxAfter}].");
+    }
 }
