@@ -13,11 +13,19 @@ public class MainWindowViewModel : INotifyPropertyChanged
         ];
 
         // Dev-loop hook: LVC_SAMPLE selects an initial sample by path
-        // (e.g. LVC_SAMPLE=VisualTest/Issue1986Repro). Lets agents/scripts
-        // launch the app pointed at a specific repro without UI navigation.
+        // (e.g. LVC_SAMPLE=VisualTest/Issue1986Repro). The view is resolved by
+        // type name (see SampleConverter), so this works for any sample —
+        // including repro views that are intentionally not listed in the shared
+        // index. The path is appended to Samples so the selector dropdown stays
+        // in sync with the displayed view.
         var initial = Environment.GetEnvironmentVariable("LVC_SAMPLE");
-        if (!string.IsNullOrWhiteSpace(initial) && Array.IndexOf(Samples, initial) >= 0)
+        if (!string.IsNullOrWhiteSpace(initial)
+            && Type.GetType($"AvaloniaSample.{initial.Replace('/', '.')}.View") is not null)
+        {
+            if (Array.IndexOf(Samples, initial) < 0)
+                Samples = [.. Samples, initial];
             SelectedSample = initial;
+        }
     }
 
     public string[] Samples { get; set; }

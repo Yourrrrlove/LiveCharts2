@@ -19,10 +19,18 @@ public partial class AppShell : Shell
         var samples = ViewModelsSamples.Index.Samples;
 
         // Dev-loop hook: LVC_SAMPLE selects an initial sample by path
-        // (e.g. LVC_SAMPLE=Bars/Basic). Lets agents/scripts launch the app
-        // pointed at a specific repro. Falls back to the first sample if
-        // the env var is unset or the path isn't in the index.
+        // (e.g. LVC_SAMPLE=Bars/Basic). The view is resolved by type name, so
+        // this works for any sample — including repro views that are
+        // intentionally not listed in the shared index: an unlisted path whose
+        // View type exists is appended so it gets a route and is shown on
+        // launch. Falls back to the first sample if the env var is unset or the
+        // path has no matching View.
         var initial = Environment.GetEnvironmentVariable("LVC_SAMPLE");
+        if (!string.IsNullOrWhiteSpace(initial)
+            && Array.IndexOf(samples, initial) < 0
+            && Type.GetType($"MauiSample.{initial.Replace('/', '.')}.View") is not null)
+            samples = [.. samples, initial];
+
         var initialIndex = string.IsNullOrWhiteSpace(initial)
             ? 0
             : Math.Max(0, Array.IndexOf(samples, initial));
