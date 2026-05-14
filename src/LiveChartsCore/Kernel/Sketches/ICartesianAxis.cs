@@ -145,18 +145,6 @@ public interface ICartesianAxis : IPlane, INotifyPropertyChanged
     IEnumerable<ICartesianAxis>? SharedWith { get; set; }
 
     /// <summary>
-    /// Gets the user-pinned <see cref="IPlane.MinLimit"/>, independent of the current view min the chart
-    /// engine mutates via SetLimits during zoom/pan. <c>null</c> when the user never pinned a min.
-    /// </summary>
-    double? UserSetMinLimit { get; }
-
-    /// <summary>
-    /// Gets the user-pinned <see cref="IPlane.MaxLimit"/>, independent of the current view max the chart
-    /// engine mutates via SetLimits during zoom/pan. <c>null</c> when the user never pinned a max.
-    /// </summary>
-    double? UserSetMaxLimit { get; }
-
-    /// <summary>
     /// Gets or sets the sub-separators paint.
     /// </summary>
     /// <value>

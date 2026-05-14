@@ -40,7 +40,7 @@ namespace LiveChartsCore;
 /// <typeparam name="TTextGeometry">The type of the text geometry.</typeparam>
 /// <typeparam name="TLineGeometry">The type of the line geometry.</typeparam>
 public abstract class CoreAxis<TTextGeometry, TLineGeometry>
-    : ChartElement, ICartesianAxis, IPlane
+    : ChartElement, ICartesianAxis, IInternalCartesianAxis, IPlane
         where TTextGeometry : BaseLabelGeometry, new()
         where TLineGeometry : BaseLineGeometry, new()
 {
@@ -313,8 +313,8 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     /// <inheritdoc cref="ICartesianAxis.SharedWith"/>
     public IEnumerable<ICartesianAxis>? SharedWith { get; set; }
 
-    double? ICartesianAxis.UserSetMinLimit => _userSetMinLimit;
-    double? ICartesianAxis.UserSetMaxLimit => _userSetMaxLimit;
+    double? IInternalCartesianAxis.UserSetMinLimit => _userSetMinLimit;
+    double? IInternalCartesianAxis.UserSetMaxLimit => _userSetMaxLimit;
 
     #endregion
 
@@ -941,10 +941,13 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
             if (minDI < mind) mind = minDI;
 
             // widest pin wins: smallest non-null UserSetMin, largest non-null UserSetMax
-            if (axis.UserSetMinLimit is { } usMin && (userSetMin is null || usMin < userSetMin))
-                userSetMin = usMin;
-            if (axis.UserSetMaxLimit is { } usMax && (userSetMax is null || usMax > userSetMax))
-                userSetMax = usMax;
+            if (axis is IInternalCartesianAxis internalAxis)
+            {
+                if (internalAxis.UserSetMinLimit is { } usMin && (userSetMin is null || usMin < userSetMin))
+                    userSetMin = usMin;
+                if (internalAxis.UserSetMaxLimit is { } usMax && (userSetMax is null || usMax > userSetMax))
+                    userSetMax = usMax;
+            }
         }
 
         if (double.IsInfinity(minZoomDelta))
