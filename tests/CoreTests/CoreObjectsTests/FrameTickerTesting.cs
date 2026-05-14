@@ -21,6 +21,16 @@ public class FrameTickerTesting
     // CoreTests, but AsyncLoopTicker is the parallel core-side implementation
     // and shares the same null-deref shape — fixing one without the other
     // would just relocate the bug.
+    //
+    // Every IFrameTicker implementation was audited for the same shape:
+    // ApplicationIdleTicker (WinForms) and the Android / iOS-MacCatalyst
+    // NativeFrameTicker partials had the unguarded _canvas.Invalidated -=
+    // (Android / Mac also dereferenced _vsyncTicker / _displayLink) and were
+    // guarded the same way. The WinUI and Uno-Skia NativeFrameTicker partials
+    // were already null-safe and were normalized to the identical idiom. The
+    // NoOS NativeFrameTicker delegates to AsyncLoopTicker. None of those
+    // tickers are reachable from CoreTests (platform TFMs / project refs), so
+    // this test pins the contract for the whole family via AsyncLoopTicker.
     [TestMethod]
     public void AsyncLoopTicker_DisposeWithoutInitialize_DoesNotThrow()
     {
