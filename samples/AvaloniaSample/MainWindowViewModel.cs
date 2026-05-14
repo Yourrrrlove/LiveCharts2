@@ -7,14 +7,10 @@ public class MainWindowViewModel : INotifyPropertyChanged
 {
     public MainWindowViewModel()
     {
-        Samples = [..
-            ViewModelsSamples.Index.Samples,
-            "VisualTest/Issue1986Repro",
-            "VisualTest/Issue2131Repro"
-        ];
+        Samples = ViewModelsSamples.Index.Samples;
 
         // Dev-loop hook: LVC_SAMPLE selects an initial sample by path
-        // (e.g. LVC_SAMPLE=VisualTest/Issue1986Repro). Lets agents/scripts
+        // (e.g. LVC_SAMPLE=Lines/Basic). Lets agents/scripts
         // launch the app pointed at a specific repro without UI navigation.
         var initial = Environment.GetEnvironmentVariable("LVC_SAMPLE");
         if (!string.IsNullOrWhiteSpace(initial) && Array.IndexOf(Samples, initial) >= 0)
