@@ -63,6 +63,9 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     private TTextGeometry? _nameGeometry;
     private double? _minLimit = null;
     private double? _maxLimit = null;
+    private double? _userSetMinLimit = null;
+    private double? _userSetMaxLimit = null;
+    private bool _isEngineSettingLimits;
     private BaseLineGeometry? _ticksPath;
     private BaseLineGeometry? _zeroLine;
     private BaseLineGeometry? _crosshairLine;
@@ -142,6 +145,15 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
             if (filtered is not null && double.IsNaN(filtered.Value))
                 filtered = null;
 
+            // Track the user-set pinning separately from the view min/max.
+            // The chart engine's zoom/pan path also lands here (via
+            // SetLimits(notify: true)) — that path raises _isEngineSettingLimits
+            // so the engine's transient view is NOT mistaken for a user pin.
+            // Without this guard the outer rail collapses onto the zoomed-out
+            // view and the bounce-back-to-fit is lost (#2159).
+            if (!_isEngineSettingLimits)
+                _userSetMinLimit = filtered;
+
             SetProperty(ref _minLimit, filtered);
         }
     }
@@ -156,6 +168,9 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
 
             if (filtered is not null && double.IsNaN(filtered.Value))
                 filtered = null;
+
+            if (!_isEngineSettingLimits)
+                _userSetMaxLimit = filtered;
 
             SetProperty(ref _maxLimit, filtered);
         }
@@ -926,7 +941,11 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
             maxd = max;
         }
 
-        return new(min, max, minZoomDelta, mind, maxd);
+        return new(min, max, minZoomDelta, mind, maxd)
+        {
+            UserSetMin = _userSetMinLimit,
+            UserSetMax = _userSetMaxLimit,
+        };
     }
 
     /// <inheritdoc cref="ICartesianAxis.SetLimits(double, double, double, bool, bool)"/>
@@ -939,13 +958,25 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
 
         if (notify)
         {
-            MinLimit = min;
-            MaxLimit = max;
-
-            if (step > 0)
+            // notify: true still raises PropertyChanged so two-way MinLimit/
+            // MaxLimit bindings track zoom/pan — but _isEngineSettingLimits
+            // keeps the property setters from recording this engine-driven
+            // view change as a user pin (#2159).
+            _isEngineSettingLimits = true;
+            try
             {
-                ForceStepToMin = true;
-                MinStep = step;
+                MinLimit = min;
+                MaxLimit = max;
+
+                if (step > 0)
+                {
+                    ForceStepToMin = true;
+                    MinStep = step;
+                }
+            }
+            finally
+            {
+                _isEngineSettingLimits = false;
             }
         }
         else
