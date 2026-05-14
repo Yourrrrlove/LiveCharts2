@@ -9,7 +9,8 @@ public class MainWindowViewModel : INotifyPropertyChanged
     {
         Samples = [..
             ViewModelsSamples.Index.Samples,
-            "VisualTest/Issue1986Repro"
+            "VisualTest/Issue1986Repro",
+            "VisualTest/Issue2131Repro"
         ];
 
         // Dev-loop hook: LVC_SAMPLE selects an initial sample by path
