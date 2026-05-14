@@ -6,11 +6,16 @@ via `SkiaSharpInterop.js`. That link step requires the .NET WebAssembly
 build tools workload — without it, the first chart render throws
 `ReferenceError: Module is not defined` (see #2229).
 
-Install it once per machine:
+Install it:
 
 ```bash
 dotnet workload install wasm-tools
 ```
+
+.NET workloads are scoped to the SDK feature band, so a .NET SDK update — even a
+minor one that bumps the feature band (e.g. `10.0.1xx` → `10.0.2xx`) — can leave
+the workload missing again and re-trigger `LVC0001` on the next build. After
+updating the SDK, re-run the command above or `dotnet workload update`.
 
 The package emits build error `LVC0001` if the workload is missing, so
 consumers see the requirement at build time instead of debugging the

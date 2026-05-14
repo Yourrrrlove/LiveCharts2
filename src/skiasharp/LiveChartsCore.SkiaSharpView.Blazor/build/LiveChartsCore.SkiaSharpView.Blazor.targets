@@ -17,7 +17,7 @@
             and '$(WasmNativeWorkloadAvailable)' != 'true'">
 
     <Error Code="LVC0001"
-           Text="LiveChartsCore.SkiaSharpView.Blazor needs the .NET WebAssembly build tools workload, because SkiaSharp.Views.Blazor must be linked into your app's WebAssembly bundle. Without it, the first chart render throws 'ReferenceError: Module is not defined' (https://github.com/Live-Charts/LiveCharts2/issues/2229). Install the workload by running: dotnet workload install wasm-tools. See https://aka.ms/dotnet/wasm-build-tools for details." />
+           Text="LiveChartsCore.SkiaSharpView.Blazor needs the .NET WebAssembly build tools workload, because SkiaSharp.Views.Blazor must be linked into your app's WebAssembly bundle. Without it, the first chart render throws 'ReferenceError: Module is not defined' (https://github.com/Live-Charts/LiveCharts2/issues/2229). Install the workload by running: dotnet workload install wasm-tools. Workloads are scoped to the SDK feature band, so if a .NET SDK update triggered this error, re-run that command or 'dotnet workload update'. See https://aka.ms/dotnet/wasm-build-tools for details." />
 
   </Target>
 
