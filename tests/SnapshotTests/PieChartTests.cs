@@ -184,14 +184,16 @@ public sealed class PieChartTests
     [TestMethod]
     public void GaugeInTightBounds()
     {
-        // issue #2131 (re-open): with a small chart size (~110px), the default
-        // HoverPushout=20 on every PieSeries had each gauge subtract 40px from the
-        // available diameter via PushoutBounds. That pushed the user's requested
-        // InnerRadius outside the chart's available radius, collapsing the rendered
-        // ring to a 1px sliver positioned at the wrong radius. Gauges never pop out
-        // on hover, so they no longer contribute to PushoutBounds — the ring now
-        // honors InnerRadius + MaxRadialColumnWidth exactly the same as in a roomy
-        // chart, just scaled down.
+        // issue #2131 (re-open): with a small chart size, the default HoverPushout=20
+        // on every PieSeries had each gauge subtract 40px from the available diameter
+        // via PushoutBounds. That pushed the user's requested InnerRadius outside the
+        // chart's available radius, so the MaxRadialColumnWidth clamp never fired and
+        // the value ring broke. The geometry here is the reporter's actual layout — a
+        // wide, short "card row" (240x100) — which renders the value gauge as an
+        // oversized blob escaping the top of the chart; a square tight chart only
+        // collapses it to a small concentric ring, a milder symptom. Gauges never pop
+        // out on hover, so they no longer contribute to PushoutBounds — the ring now
+        // honors InnerRadius + MaxRadialColumnWidth the same as in a roomy chart.
         var chart = new SKPieChart
         {
             Series = GaugeGenerator.BuildSolidGauge(
@@ -214,8 +216,8 @@ public sealed class PieChartTests
             MaxAngle = 360,
             MinValue = 0,
             MaxValue = 100,
-            Width = 110,
-            Height = 110
+            Width = 240,
+            Height = 100
         };
 
         chart.AssertSnapshotMatches($"{nameof(PieChartTests)}_{nameof(GaugeInTightBounds)}");

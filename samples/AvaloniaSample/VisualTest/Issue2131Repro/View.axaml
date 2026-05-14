@@ -8,67 +8,51 @@
         HorizontalAlignment="Center"
         VerticalAlignment="Center"
         Orientation="Horizontal"
-        Spacing="40">
+        Spacing="80">
 
-        <!--  Constrained 110 x 110 wrapper — reporter's setup  -->
+        <!--  Reporter's actual layout (issue #2131): the chart fills a wide, short
+              "card row" — no explicit Width/Height on the chart, only
+              MinHeight/MinWidth=100, exactly as in the reported XAML. The host
+              stays laid out small so the bug still occurs; the Viewbox only
+              magnifies the rendered output 3x. ClipToBounds=False so the
+              value-gauge blob escaping the chart bounds stays visible — that is
+              the reporter's actual symptom.  -->
+        <StackPanel ClipToBounds="False">
+            <TextBlock Text="240 x 100 card row (rendered 3x)" HorizontalAlignment="Center" Margin="0,0,0,260" />
+            <Viewbox Width="720" Height="300" ClipToBounds="False">
+                <Grid
+                    Width="240"
+                    Height="100"
+                    Background="#33000000"
+                    ClipToBounds="False">
+                    <lvc:PieChart
+                        x:Name="constrainedChart"
+                        InitialRotation="270"
+                        LegendPosition="Hidden"
+                        MaxAngle="360"
+                        MaxValue="100"
+                        MinHeight="100"
+                        MinValue="0"
+                        MinWidth="100"
+                        TooltipPosition="Hidden" />
+                </Grid>
+            </Viewbox>
+        </StackPanel>
+
+        <!--  Control: same setup with ample space, should look correct  -->
         <StackPanel>
-            <TextBlock Text="110 x 110 wrapper" HorizontalAlignment="Center" />
-            <Grid Width="110" Height="110" Background="#33000000">
+            <TextBlock Text="400 x 310 card row (control)" HorizontalAlignment="Center" Margin="0,0,0,12" />
+            <Grid Width="400" Height="310" Background="#33000000">
                 <lvc:PieChart
-                    x:Name="constrainedChart"
+                    x:Name="controlChart"
                     InitialRotation="270"
                     LegendPosition="Hidden"
                     MaxAngle="360"
                     MaxValue="100"
                     MinHeight="100"
                     MinValue="0"
-                    TooltipPosition="Hidden">
-                    <lvc:PieChart.Series>
-                        <lvc:XamlGaugeSeries
-                            Fill="{lvc:SolidColorPaint Color='#1E90FF'}"
-                            GaugeValue="100"
-                            InnerRadius="38"
-                            RelativeInnerRadius="-4"
-                            MaxRadialColumnWidth="5"
-                            ShowDataLabels="False" />
-                        <lvc:XamlGaugeBackgroundSeries
-                            Fill="{lvc:SolidColorPaint Color='#A9A9A9'}"
-                            InnerRadius="40"
-                            RelativeInnerRadius="4"
-                            OuterRadiusOffset="-20"
-                            MaxRadialColumnWidth="5" />
-                    </lvc:PieChart.Series>
-                </lvc:PieChart>
-            </Grid>
-        </StackPanel>
-
-        <!--  Larger 300 x 300 wrapper — control, should look correct  -->
-        <StackPanel>
-            <TextBlock Text="300 x 300 wrapper (control)" HorizontalAlignment="Center" />
-            <Grid Width="300" Height="300" Background="#33000000">
-                <lvc:PieChart
-                    InitialRotation="270"
-                    LegendPosition="Hidden"
-                    MaxAngle="360"
-                    MaxValue="100"
-                    MinValue="0"
-                    TooltipPosition="Hidden">
-                    <lvc:PieChart.Series>
-                        <lvc:XamlGaugeSeries
-                            Fill="{lvc:SolidColorPaint Color='#1E90FF'}"
-                            GaugeValue="100"
-                            InnerRadius="38"
-                            RelativeInnerRadius="-4"
-                            MaxRadialColumnWidth="5"
-                            ShowDataLabels="False" />
-                        <lvc:XamlGaugeBackgroundSeries
-                            Fill="{lvc:SolidColorPaint Color='#A9A9A9'}"
-                            InnerRadius="40"
-                            RelativeInnerRadius="4"
-                            OuterRadiusOffset="-20"
-                            MaxRadialColumnWidth="5" />
-                    </lvc:PieChart.Series>
-                </lvc:PieChart>
+                    MinWidth="100"
+                    TooltipPosition="Hidden" />
             </Grid>
         </StackPanel>
 
