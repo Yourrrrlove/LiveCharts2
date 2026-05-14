@@ -313,6 +313,9 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     /// <inheritdoc cref="ICartesianAxis.SharedWith"/>
     public IEnumerable<ICartesianAxis>? SharedWith { get; set; }
 
+    double? ICartesianAxis.UserSetMinLimit => _userSetMinLimit;
+    double? ICartesianAxis.UserSetMaxLimit => _userSetMaxLimit;
+
     #endregion
 
     /// <inheritdoc cref="ICartesianAxis.MeasureStarted"/>
@@ -917,6 +920,13 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
         var mind = DataBounds.Min;
         var minZoomDelta = MinZoomDelta ?? DataBounds.MinDelta * 3;
 
+        // The user pin must be aggregated across the shared group the same way
+        // Min/Max/DataMin/DataMax are: a zoom started from an unpinned shared
+        // axis still has to honor a sibling's pin as the outer rail, otherwise
+        // SetLimits propagates a data-bounds collapse onto the pinned axis (#2159).
+        var userSetMin = _userSetMinLimit;
+        var userSetMax = _userSetMaxLimit;
+
         foreach (var axis in SharedWith ?? [])
         {
             var maxI = axis.MaxLimit is null ? axis.DataBounds.Max : axis.MaxLimit.Value;
@@ -929,6 +939,12 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
             if (minI < min) min = minI;
             if (maxDI > maxd) maxd = maxDI;
             if (minDI < mind) mind = minDI;
+
+            // widest pin wins: smallest non-null UserSetMin, largest non-null UserSetMax
+            if (axis.UserSetMinLimit is { } usMin && (userSetMin is null || usMin < userSetMin))
+                userSetMin = usMin;
+            if (axis.UserSetMaxLimit is { } usMax && (userSetMax is null || usMax > userSetMax))
+                userSetMax = usMax;
         }
 
         if (double.IsInfinity(minZoomDelta))
@@ -943,8 +959,8 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
 
         return new(min, max, minZoomDelta, mind, maxd)
         {
-            UserSetMin = _userSetMinLimit,
-            UserSetMax = _userSetMaxLimit,
+            UserSetMin = userSetMin,
+            UserSetMax = userSetMax,
         };
     }
 
