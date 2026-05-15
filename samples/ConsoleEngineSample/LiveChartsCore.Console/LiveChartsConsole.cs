@@ -82,7 +82,15 @@ public static class LiveChartsConsole
                 .HasRuleForLineSeries(line =>
                 {
                     var color = theme.GetSeriesColor(line);
-                    line.Stroke = new SolidColorPaint(color, 1f);
+                    // If the user pre-set Stroke (typically to control StrokeThickness),
+                    // mutate the existing paint's color in-place rather than reassigning —
+                    // the setter is rejected by CanSetProperty since user-set tracking marks
+                    // Stroke as touched, so the theme's assignment would be a no-op and
+                    // we'd be left with the user's placeholder color.
+                    if (line.Stroke is SolidColorPaint existing)
+                        existing.Color = color;
+                    else
+                        line.Stroke = new SolidColorPaint(color, 1f);
                     line.Fill = null;
                     line.GeometrySize = 0; // hide default point geometries.
                     line.GeometryStroke = null;
@@ -91,7 +99,10 @@ public static class LiveChartsConsole
                 .HasRuleForStepLineSeries(step =>
                 {
                     var color = theme.GetSeriesColor(step);
-                    step.Stroke = new SolidColorPaint(color, 1f);
+                    if (step.Stroke is SolidColorPaint existing)
+                        existing.Color = color;
+                    else
+                        step.Stroke = new SolidColorPaint(color, 1f);
                     step.Fill = null;
                     step.GeometrySize = 0;
                     step.GeometryStroke = null;

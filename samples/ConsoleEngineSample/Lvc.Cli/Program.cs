@@ -210,7 +210,7 @@ static InMemoryConsoleChart BuildChart(ChartSpec spec, ConsoleRenderMode mode) =
         // the name sits past the rightmost point instead of overlapping it. Single-line
         // charts get a redundant label, but it's at the end so it doesn't clutter the curve.
         var lastIndex = (s.Values?.Length ?? 0) - 1;
-        return new LineSeries<double>(s.Values ?? [])
+        var line = new LineSeries<double>(s.Values ?? [])
         {
             Name = s.Name,
             GeometrySize = 0,
@@ -219,6 +219,11 @@ static InMemoryConsoleChart BuildChart(ChartSpec spec, ConsoleRenderMode mode) =
             DataLabelsFormatter = p => p.Index == lastIndex ? p.Context.Series.Name ?? "" : "",
             DataLabelsPosition = LiveChartsCore.Measure.DataLabelsPosition.Right,
         };
+        // Pre-set Stroke with the user-requested thickness; theme rule preserves
+        // StrokeThickness and overrides the color, so we use a placeholder LvcColor here.
+        if (s.StrokeThickness is { } t)
+            line.Stroke = new LiveChartsCore.Console.Painting.SolidColorPaint(default, (float)t);
+        return line;
     }, legendOverride: LiveChartsCore.Measure.LegendPosition.Hidden),
     "column"  => Cartesian(mode, spec, s => new ColumnSeries<double>(s.Values ?? []) { Name = s.Name }),
     "row"     => Cartesian(mode, spec, s => new RowSeries<double>(s.Values ?? []) { Name = s.Name }),
@@ -315,7 +320,8 @@ internal record ChartSpec(
 internal record SeriesSpec(
     string? Name,
     double[]? Values,
-    double[][]? Points);
+    double[][]? Points,
+    double? StrokeThickness);
 
 internal record AxisSpec(
     string? Name,
