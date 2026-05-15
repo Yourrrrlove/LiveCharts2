@@ -982,21 +982,15 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
             // keeps the property setters from recording this engine-driven
             // view change as a user pin (#2159).
             _isEngineSettingLimits = true;
-            try
-            {
-                MinLimit = min;
-                MaxLimit = max;
+            MinLimit = min;
+            MaxLimit = max;
 
-                if (step > 0)
-                {
-                    ForceStepToMin = true;
-                    MinStep = step;
-                }
-            }
-            finally
+            if (step > 0)
             {
-                _isEngineSettingLimits = false;
+                ForceStepToMin = true;
+                MinStep = step;
             }
+            _isEngineSettingLimits = false;
         }
         else
         {
