@@ -31,6 +31,16 @@ This writes `~/.claude/skills/render-chart/SKILL.md`. Re-run after
 `dotnet tool update -g LiveChartsCore.Console.Cli` to pick up any skill
 revisions in the new version. Honors `$CLAUDE_HOME` if set.
 
+To remove the skill (e.g., before `dotnet tool uninstall -g`):
+
+```sh
+lvc --uninstall-skill
+```
+
+No-op if the skill isn't installed; removes the parent directory only if
+it's empty so user-authored files in `~/.claude/skills/render-chart/` are
+left alone.
+
 For GitHub Copilot users: there's no equivalent skill format; paraphrase
 the relevant decision tree from the SKILL.md into your project's
 `.github/copilot-instructions.md` by hand.

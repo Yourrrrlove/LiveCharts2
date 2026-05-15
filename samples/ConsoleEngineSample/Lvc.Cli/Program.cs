@@ -37,6 +37,13 @@ if (args.Contains("--install-skill"))
     return InstallSkill();
 }
 
+if (args.Contains("--uninstall-skill"))
+{
+    // Inverse of --install-skill — remove the SKILL.md and the now-empty parent dir.
+    // No-op (with a friendly note) if the skill wasn't installed.
+    return UninstallSkill();
+}
+
 System.Console.OutputEncoding = Encoding.UTF8;
 
 string? jsonInput = null;
@@ -299,12 +306,7 @@ static int InstallSkill()
         return 2;
     }
 
-    // Honor $CLAUDE_HOME if set, otherwise default to ~/.claude. Lets a user with a custom
-    // Claude config root point at it without symlinking.
-    var claudeHome = Environment.GetEnvironmentVariable("CLAUDE_HOME")
-        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
-    var targetDir = Path.Combine(claudeHome, "skills", "render-chart");
-    var targetPath = Path.Combine(targetDir, "SKILL.md");
+    var (targetDir, targetPath) = SkillInstallPath();
 
     try
     {
@@ -314,7 +316,7 @@ static int InstallSkill()
     }
     catch (Exception ex)
     {
-        System.Console.Error.WriteLine($"error: failed to write skill to {targetPath} — {ex.Message}");
+        System.Console.Error.WriteLine($"error: failed to write skill to {targetPath} -- {ex.Message}");
         return 2;
     }
 
@@ -322,10 +324,48 @@ static int InstallSkill()
     return 0;
 }
 
+static int UninstallSkill()
+{
+    var (targetDir, targetPath) = SkillInstallPath();
+
+    if (!File.Exists(targetPath))
+    {
+        System.Console.Out.WriteLine($"No render-chart skill at {targetPath} -- nothing to remove.");
+        return 0;
+    }
+
+    try
+    {
+        File.Delete(targetPath);
+        // Best-effort dir cleanup. Only remove if empty so we don't wipe user-authored
+        // files that happen to share the directory.
+        if (Directory.Exists(targetDir) && Directory.GetFileSystemEntries(targetDir).Length == 0)
+            Directory.Delete(targetDir);
+    }
+    catch (Exception ex)
+    {
+        System.Console.Error.WriteLine($"error: failed to remove skill at {targetPath} -- {ex.Message}");
+        return 2;
+    }
+
+    System.Console.Out.WriteLine($"Removed render-chart skill <- {targetPath}");
+    return 0;
+}
+
+static (string targetDir, string targetPath) SkillInstallPath()
+{
+    // Honor $CLAUDE_HOME if set, otherwise default to ~/.claude. Lets a user with a custom
+    // Claude config root point at it without symlinking.
+    var claudeHome = Environment.GetEnvironmentVariable("CLAUDE_HOME")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
+    var dir = Path.Combine(claudeHome, "skills", "render-chart");
+    return (dir, Path.Combine(dir, "SKILL.md"));
+}
+
 static void PrintUsage() => System.Console.Error.WriteLine("""
     usage: lvc [--mode auto|sixel|braille|halfblock] [--width N] [--height N]
                [--no-color] [--live] [--json '<spec>' | --file path]
-           lvc --install-skill
+           lvc --install-skill | --uninstall-skill
 
     JSON spec:
       {
