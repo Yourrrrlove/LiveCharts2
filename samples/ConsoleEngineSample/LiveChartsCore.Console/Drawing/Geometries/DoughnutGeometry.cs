@@ -35,7 +35,7 @@ public class DoughnutGeometry : BaseDoughnutGeometry, IDrawnElement<ConsoleDrawi
         // PushOut shifts the entire wedge along the bisector angle. Compute the offset once and
         // apply to both the center and the bounding box.
         float pushX = 0, pushY = 0;
-        if (pushOut != 0)
+        if (Math.Abs(pushOut) > 1e-6f)
         {
             var midRad = (StartAngle + sweep / 2) * Math.PI / 180.0;
             pushX = (float)(Math.Cos(midRad) * pushOut);

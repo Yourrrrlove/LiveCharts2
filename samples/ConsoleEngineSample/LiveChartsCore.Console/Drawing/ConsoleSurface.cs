@@ -529,7 +529,7 @@ public sealed class ConsoleSurface
         var hasBot = hb.Bottom.A != 0;
         if (!hasTop && !hasBot) return ' ';
         if (hasTop && !hasBot) return '▀';
-        if (!hasTop && hasBot) return '▄';
+        if (!hasTop) return '▄'; // hasBot is implied — prior branches handled both-clear and top-only.
         // Two colors in one cell normally pick '▀' with bg=bottom-color so the colored
         // encoder can paint both halves. Without color the contrast disappears, so collapse
         // to the both-filled glyph instead — '▀' with no contrast looks half-empty.
@@ -577,7 +577,7 @@ public sealed class ConsoleSurface
         var hasBot = hb.Bottom.A != 0;
         if (!hasTop && !hasBot) { glyph = ' '; fg = Background; bg = Background; }
         else if (hasTop && !hasBot) { glyph = '▀'; fg = hb.Top; bg = Background; }
-        else if (!hasTop && hasBot) { glyph = '▄'; fg = hb.Bottom; bg = Background; }
+        else if (!hasTop) { glyph = '▄'; fg = hb.Bottom; bg = Background; } // hasBot implied here.
         else if (Equal(hb.Top, hb.Bottom)) { glyph = '█'; fg = hb.Top; bg = Background; }
         else { glyph = '▀'; fg = hb.Top; bg = hb.Bottom; }
     }

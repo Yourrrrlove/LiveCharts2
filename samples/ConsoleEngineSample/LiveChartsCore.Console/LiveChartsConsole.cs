@@ -158,7 +158,6 @@ public static class LiveChartsConsole
                 {
                     // Default candle colors don't matter much here — the series toggles UpFill/
                     // DownFill internally based on (open, close). We just provide them.
-                    var color = theme.GetSeriesColor(financial);
                     financial.UpFill = new SolidColorPaint(new(120, 220, 120));
                     financial.UpStroke = new SolidColorPaint(new(120, 220, 120), 1f);
                     financial.DownFill = new SolidColorPaint(new(220, 120, 120));
