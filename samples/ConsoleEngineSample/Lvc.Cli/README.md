@@ -35,6 +35,21 @@ terminal. Override with `--mode halfblock|braille|sixel|auto`.
 Width / height in cells default to the current terminal; override with
 `--width N` / `--height N` (or set them in the JSON spec).
 
+### `--no-color` for LLM / agent consumers
+
+Pass `--no-color` (or set the `NO_COLOR` env var) to emit plain Braille /
+half-block glyphs with no ANSI escapes. Useful when stdout is read by
+something that doesn't paint terminal control sequences — an LLM tool
+result, a JSON log line, a code-review snapshot:
+
+```sh
+lvc --json '{"kind":"line","series":[{"values":[1,2,3,4,3,2,1]}]}' --no-color
+```
+
+`--no-color` implies Braille (or honors `--mode halfblock` if given);
+combining it with `--mode sixel` is an error since Sixel encodes pixels
+into escape sequences and has no plain form.
+
 ## JSON spec
 
 ```json
@@ -62,6 +77,14 @@ Width / height in cells default to the current terminal; override with
 `values` is used by line / column / row / step / stacked / pie / polar
 series; `points` is used by scatter (`[x, y]`), candlestick
 (`[open, high, close, low]`), and box (`[max, q3, q1, median, min]`).
+
+### Pie sizing
+
+Pie charts render each series name as a label outside its wedge and hide the
+legend, so wedges read as distinct even in `--no-color`. Outer labels need
+margin space around the disc — pies need at minimum `--width 80 --height 30`
+(or terminal equivalent). Smaller canvases will collide the labels with the
+disc and squeeze it to a sliver.
 
 ## License
 

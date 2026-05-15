@@ -15,6 +15,10 @@ public class RoundedRectangleGeometry : BaseRoundedRectangleGeometry, IDrawnElem
         if (paint.PaintStyle.HasFlag(PaintStyle.Stroke))
             context.Surface.StrokeRect((int)X, (int)Y, (int)Width, (int)Height, context.ActiveColor);
         else
-            context.Surface.FillRect((int)X, (int)Y, (int)Width, (int)Height, context.ActiveColor);
+            // Bar/column/row/stacked series all use this geometry as their TVisual, so route
+            // fills through the stamped path. Pies, lines, areas, candlesticks, etc. use
+            // different geometries (DoughnutGeometry, VectorAreaGeometry, etc.) that keep
+            // calling plain FillRect — they don't need texture distinction.
+            context.Surface.FillRectStamped((int)X, (int)Y, (int)Width, (int)Height, context.ActiveColor);
     }
 }

@@ -105,9 +105,24 @@ public class ConsoleLegend : IChartLegend
 
         foreach (var (name, color) in _entries)
         {
-            // Swatch: filled rect a hair smaller than a full cell so adjacent swatches
-            // don't blur into each other.
-            surface.FillRect(cursorX + 1, cursorY + 1, charW - 2, charH - 2, color);
+            // Swatch: prefer the per-series texture stamp when one was assigned by a bar
+            // series during this frame (and the chart has 2+ bar series, so stamps are
+            // actually visible in the chart body) — that way "█ NA / ▓ EU / ▒ APAC" reads
+            // as a direct map from the legend back to what's in the bars. Falls back to a
+            // filled-rect colored swatch for everything else (line series, single-bar
+            // charts, pie, etc.) which keeps the existing colored-mode look untouched.
+            var stamp = surface.TryGetBarStamp(color);
+            if (stamp != '\0')
+            {
+                if (surface.Mode == ConsoleRenderMode.Sixel)
+                    BitmapFont.DrawText(surface, cursorX, cursorY, stamp.ToString(), color);
+                else
+                    surface.DrawText(cursorX, cursorY, stamp.ToString(), color);
+            }
+            else
+            {
+                surface.FillRect(cursorX + 1, cursorY + 1, charW - 2, charH - 2, color);
+            }
 
             var labelX = cursorX + charW * 2; // skip swatch + 1 cell of spacing
             if (surface.Mode == ConsoleRenderMode.Sixel)

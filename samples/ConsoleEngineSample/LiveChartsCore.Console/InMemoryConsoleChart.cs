@@ -148,7 +148,13 @@ public abstract class InMemoryConsoleChart
     /// One-shot render. Disables animations so the result is the fully-settled state, then
     /// unloads the chart. Use for "save image" / snapshot workflows.
     /// </summary>
-    public string Render(bool home = false)
+    /// <param name="home">Prepend cursor-home so a follow-up frame overwrites in place.</param>
+    /// <param name="color">
+    /// When false, return a plain-text rendering with no ANSI escapes — readable in any tool
+    /// result that doesn't interpret terminal control sequences (e.g. an LLM Bash tool).
+    /// Requires <see cref="RenderMode"/> to be HalfBlock or Braille; Sixel cannot emit plain.
+    /// </param>
+    public string Render(bool home = false, bool color = true)
     {
         var coreChart = GetCoreChart()
             ?? throw new InvalidOperationException("CoreChart is not available.");
@@ -169,7 +175,7 @@ public abstract class InMemoryConsoleChart
             coreChart.Unload();
             _surface = null; // unload disposes paint state, force a fresh surface next call.
 
-            return surface.ToAnsi(home);
+            return surface.ToAnsi(home, color);
         }
     }
 

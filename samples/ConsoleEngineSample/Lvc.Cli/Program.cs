@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using LiveChartsCore;
 using LiveChartsCore.Console;
 using LiveChartsCore.Defaults;
+using LiveChartsCore.Drawing;
 using LiveChartsCore.Kernel.Sketches;
 
 // ----------------------------------------------------------------------------
@@ -34,6 +35,7 @@ string? jsonInput = null;
 ConsoleRenderMode? modeOverride = null;
 int? widthOverride = null;
 int? heightOverride = null;
+var noColor = false;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -61,11 +63,21 @@ for (var i = 0; i < args.Length; i++)
         case "--height" when i + 1 < args.Length:
             heightOverride = int.Parse(args[++i]);
             break;
+        // Emit plain glyphs only — no SGR escapes, no cursor-home. Intended for AI tool
+        // consumers (Claude Code, MCP agents) whose stdout is read as text, not painted to
+        // a terminal. Honored by the standard NO_COLOR env var too.
+        case "--no-color":
+        case "--plain":
+            noColor = true;
+            break;
         default:
             // Unknown flag — silently ignore so additions don't break older callers.
             break;
     }
 }
+
+if (!noColor && Environment.GetEnvironmentVariable("NO_COLOR") is { Length: > 0 })
+    noColor = true;
 
 // stdin fallback for the JSON spec — natural for shell pipelines.
 if (jsonInput is null && System.Console.IsInputRedirected)
@@ -97,11 +109,22 @@ LiveCharts.Configure(c => c
 
 // Resolve render mode. Explicit > spec > auto-detect (DA1 → Sixel, else Braille).
 // Auto-detect requires a real TTY; with output redirected we fall through to Braille
-// (valid on any UTF-8 terminal that later cats the file).
+// (valid on any UTF-8 terminal that later cats the file). --no-color forces Braille
+// regardless of detection — Sixel is inherently a binary escape sequence, no plain
+// equivalent, and the AI-consumer scenario this flag exists for never wants the auto
+// upgrade to Sixel even on a capable terminal.
 var mode = modeOverride
-    ?? (System.Console.IsOutputRedirected
+    ?? (noColor
         ? ConsoleRenderMode.Braille
-        : ConsoleTerminal.TryDetectSixelSupport() ? ConsoleRenderMode.Sixel : ConsoleRenderMode.Braille);
+        : System.Console.IsOutputRedirected
+            ? ConsoleRenderMode.Braille
+            : ConsoleTerminal.TryDetectSixelSupport() ? ConsoleRenderMode.Sixel : ConsoleRenderMode.Braille);
+
+if (noColor && mode == ConsoleRenderMode.Sixel)
+{
+    System.Console.Error.WriteLine("error: --no-color is incompatible with --mode sixel; Sixel has no plain-text form.");
+    return 2;
+}
 
 // Cell-based size — fall back to terminal size, then 120x30 if the terminal isn't a TTY
 // (output redirected, etc.). Spec width/height are in cells.
@@ -127,14 +150,31 @@ catch (Exception ex)
 
 if (!string.IsNullOrEmpty(spec.Title)) chart.TitleText = spec.Title;
 chart.ConfigureFromTerminalCells(cols, rows);
-System.Console.Out.Write(chart.Render(home: false));
+System.Console.Out.Write(chart.Render(home: false, color: !noColor));
 return 0;
 
 // ----------------------------------------------------------------------------
 
 static InMemoryConsoleChart BuildChart(ChartSpec spec, ConsoleRenderMode mode) => spec.Kind?.ToLowerInvariant() switch
 {
-    "line"    => Cartesian(mode, spec, s => new LineSeries<double>(s.Values ?? []) { Name = s.Name, GeometrySize = 0, LineSmoothness = 0.6 }),
+    "line"    => Cartesian(mode, spec, s =>
+    {
+        // Drop the series name at the end of each line so multi-line charts read in plain
+        // mode without a separate legend lookup. Labels only fire for the last data point
+        // (formatter returns "" everywhere else, which the engine skips); position Right so
+        // the name sits past the rightmost point instead of overlapping it. Single-line
+        // charts get a redundant label, but it's at the end so it doesn't clutter the curve.
+        var lastIndex = (s.Values?.Length ?? 0) - 1;
+        return new LineSeries<double>(s.Values ?? [])
+        {
+            Name = s.Name,
+            GeometrySize = 0,
+            LineSmoothness = 0.6,
+            DataLabelsPaint = new LiveChartsCore.Console.Painting.SolidColorPaint(new LvcColor(255, 255, 255)),
+            DataLabelsFormatter = p => p.Index == lastIndex ? p.Context.Series.Name ?? "" : "",
+            DataLabelsPosition = LiveChartsCore.Measure.DataLabelsPosition.Right,
+        };
+    }, legendOverride: LiveChartsCore.Measure.LegendPosition.Hidden),
     "column"  => Cartesian(mode, spec, s => new ColumnSeries<double>(s.Values ?? []) { Name = s.Name }),
     "row"     => Cartesian(mode, spec, s => new RowSeries<double>(s.Values ?? []) { Name = s.Name }),
     "step"    => Cartesian(mode, spec, s => new StepLineSeries<double>(s.Values ?? []) { Name = s.Name, GeometrySize = 0 }),
@@ -150,8 +190,19 @@ static InMemoryConsoleChart BuildChart(ChartSpec spec, ConsoleRenderMode mode) =
     "pie" => new PieChart
     {
         RenderMode = mode,
-        Series = spec.Series.Select(s => (ISeries)new PieSeries<double>(s.Values?[0] ?? 0) { Name = s.Name }).ToArray(),
-        LegendPosition = LiveChartsCore.Measure.LegendPosition.Bottom,
+        // Pushout creates visible gaps between wedges so they read as distinct shapes
+        // even in plain mode (no color contrast to separate them). Outer-position
+        // data labels then name each wedge from outside the disc, which makes the
+        // legend redundant — hide it.
+        Series = spec.Series.Select(s => (ISeries)new PieSeries<double>(s.Values?[0] ?? 0)
+        {
+            Name = s.Name,
+            Pushout = 3,
+            DataLabelsPaint = new LiveChartsCore.Console.Painting.SolidColorPaint(new LvcColor(255, 255, 255)),
+            DataLabelsFormatter = p => p.Context.Series.Name ?? "",
+            DataLabelsPosition = LiveChartsCore.Measure.PolarLabelsPosition.Outer,
+        }).ToArray(),
+        LegendPosition = LiveChartsCore.Measure.LegendPosition.Hidden,
     },
     "polar" => new PolarChart
     {
@@ -163,18 +214,24 @@ static InMemoryConsoleChart BuildChart(ChartSpec spec, ConsoleRenderMode mode) =
     var k => throw new ArgumentException($"unknown 'kind': {k}"),
 };
 
-static InMemoryConsoleChart Cartesian(ConsoleRenderMode mode, ChartSpec spec, Func<SeriesSpec, ISeries> factory) =>
+static InMemoryConsoleChart Cartesian(ConsoleRenderMode mode, ChartSpec spec, Func<SeriesSpec, ISeries> factory,
+    LiveChartsCore.Measure.LegendPosition? legendOverride = null) =>
     new CartesianChart
     {
         RenderMode = mode,
         Series = spec.Series.Select(factory).ToArray(),
         XAxes = spec.XAxis is { } xa ? [new Axis { Name = xa.Name, Labels = xa.Labels }] : null!,
         YAxes = spec.YAxis is { } ya ? [new Axis { Name = ya.Name, Labels = ya.Labels }] : null!,
-        LegendPosition = spec.Series.Length > 1 ? LiveChartsCore.Measure.LegendPosition.Bottom : LiveChartsCore.Measure.LegendPosition.Hidden,
+        // Line series self-label at the end of each curve so the legend is redundant;
+        // pass Hidden as override there. Default: legend at bottom when there are 2+
+        // series to map back to.
+        LegendPosition = legendOverride
+            ?? (spec.Series.Length > 1 ? LiveChartsCore.Measure.LegendPosition.Bottom : LiveChartsCore.Measure.LegendPosition.Hidden),
     };
 
 static void PrintUsage() => System.Console.Error.WriteLine("""
-    usage: lvc [--mode auto|sixel|braille|halfblock] [--width N] [--height N] [--json '<spec>' | --file path]
+    usage: lvc [--mode auto|sixel|braille|halfblock] [--width N] [--height N]
+               [--no-color] [--json '<spec>' | --file path]
 
     JSON spec:
       {

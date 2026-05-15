@@ -37,6 +37,16 @@ public sealed class ConsoleSurface
     private readonly LvcColor[,]? _pixels;
     private readonly GlyphCell[,] _glyphs;
 
+    // Parallel per-cell grid of "bar fill stamp" characters, populated by FillRectStamped
+    // (called only from bar/column/row geometries). Used by the plain-mode encoder to give
+    // each bar series a distinct texture (█ ▓ ▒ ░ ...) — pies, lines, areas etc. don't
+    // call the stamped path, so their cells stay at 0 and read as the original derived
+    // glyph. Lazy: stays null until a bar geometry actually fills something.
+    private char[,]? _barStamps;
+    private readonly Dictionary<int, char> _barStampPalette = new();
+    private static readonly char[] s_barStampGlyphs =
+        ['█', '▓', '▒', '░', '▚', '▞', '▙', '▟'];
+
     // Active clip rect in pixel coords. SetPixel rejects writes outside this range, which is
     // how we honor LiveChartsCore's CanvasZone.DrawMargin / XCrosshair / YCrosshair zones —
     // ConsoleDrawingContext.OnBeginZone calls SetClip; OnEndZone calls ResetClip.
@@ -151,6 +161,12 @@ public sealed class ConsoleSurface
         if (_pixels is not null) Array.Clear(_pixels, 0, _pixels.Length);
         Array.Clear(_glyphs, 0, _glyphs.Length);
 
+        // Reset bar-stamp state so each frame builds its own color → glyph mapping from
+        // scratch — otherwise an animated chart whose colors drift would slowly exhaust the
+        // palette and assignments would change between identical-looking frames.
+        if (_barStamps is not null) Array.Clear(_barStamps, 0, _barStamps.Length);
+        _barStampPalette.Clear();
+
         // A stale clip from a prior frame would silently drop draws the new frame asks for —
         // OnBeginZone will set it again immediately, but reset here so any draw between Clear
         // and the first zone enters with a sane "anywhere on the surface" clip.
@@ -237,6 +253,88 @@ public sealed class ConsoleSurface
                 SetPixel(px, py, color);
     }
 
+    /// <summary>
+    /// Bar-aware variant of <see cref="FillRect"/>. Fills the pixel grid identically so the
+    /// colored encoder still paints the rect, then additionally writes a per-color stamp
+    /// character (cycled through <see cref="s_barStampGlyphs"/>) into every cell the rect
+    /// fully covers. Used by <see cref="Geometries.RoundedRectangleGeometry"/> — the only
+    /// geometry bar series (column / row / stacked-column / stacked-row) use — so plain
+    /// mode can give each bar series a distinct texture. Other geometries (pie, line, area,
+    /// candlestick) keep calling <see cref="FillRect"/> and their plain rendering is
+    /// unchanged.
+    /// </summary>
+    public void FillRectStamped(int x, int y, int w, int h, LvcColor color)
+    {
+        // Pixel fill first so the colored encoder still gets a solid rect.
+        FillRect(x, y, w, h, color);
+
+        // Sixel renders pixels directly; cell stamps don't apply.
+        if (Mode == ConsoleRenderMode.Sixel) return;
+
+        var stamp = StampForColor(color);
+        _barStamps ??= new char[CellRows, CellCols];
+
+        // Normalize negative dims (same shape FillRect handles), then intersect with the
+        // active clip rect — otherwise stamps would write into cells that FillRect's pixel
+        // path correctly rejected (e.g., a bar rect that extends past DrawMargin would
+        // bleed stamp glyphs into axis-label rows where no pixels were ever drawn).
+        var ax = Math.Max(_clipX0, Math.Min(x, x + w));
+        var ay = Math.Max(_clipY0, Math.Min(y, y + h));
+        var bx = Math.Min(_clipX1, Math.Max(x, x + w));
+        var by = Math.Min(_clipY1, Math.Max(y, y + h));
+        if (bx <= ax || by <= ay) return;
+
+        // Round rect bounds to the nearest cell edge (>50% of a cell covered → include it).
+        // Avoids two failure modes: rounding inward (only fully-covered cells) leaves the
+        // rect's edge as Braille partials like ⣸/⢸/⡇/⣇ — visually jarring next to a shaded
+        // interior like ▓ because Unicode has no shaded half-block variants; rounding
+        // outward makes bars look ~1 cell taller than their data, throwing off the
+        // proportions you can read off the chart. Half-rounding keeps the bar within
+        // ±0.5 cells of its true extent while making the whole bar uniformly textured.
+        var c0 = Math.Max(0, (ax + CellWidth / 2) / CellWidth);
+        var r0 = Math.Max(0, (ay + CellHeight / 2) / CellHeight);
+        var c1 = Math.Min(CellCols, (bx + CellWidth / 2) / CellWidth);
+        var r1 = Math.Min(CellRows, (by + CellHeight / 2) / CellHeight);
+
+        for (var r = r0; r < r1; r++)
+            for (var c = c0; c < c1; c++)
+                _barStamps[r, c] = stamp;
+    }
+
+    /// <summary>
+    /// Returns the bar-fill stamp character assigned to <paramref name="color"/> in this
+    /// frame, or '\0' if there's no stamp to use. Mirrors the encoder's rule: stamps are
+    /// only meaningful when 2+ distinct bar colors exist (single-series bar charts keep
+    /// their Braille look), so this returns '\0' even if the color is known when the
+    /// palette only has one entry. Used by the legend to render a per-series texture
+    /// swatch that matches what the chart actually shows.
+    /// </summary>
+    public char TryGetBarStamp(LvcColor color)
+    {
+        if (_barStampPalette.Count <= 1) return '\0';
+        var key = (color.R << 16) | (color.G << 8) | color.B;
+        return _barStampPalette.TryGetValue(key, out var stamp) ? stamp : '\0';
+    }
+
+    private char StampForColor(LvcColor c)
+    {
+        var key = (c.R << 16) | (c.G << 8) | c.B;
+        if (!_barStampPalette.TryGetValue(key, out var stamp))
+        {
+            // Always assign a stamp from index 0 — '█' for the first series, '▓' for the
+            // second, etc. Whether to actually USE these in plain encoding is decided at
+            // encode time by checking palette count: a single-series chart (count == 1)
+            // ignores stamps entirely and falls through to the derived Braille glyph
+            // (high-resolution single bar look). A multi-series chart (count > 1) uses
+            // stamps for all series so the textures stay visually consistent across the
+            // chart — no mixing of Braille edges with shaded interiors.
+            var idx = _barStampPalette.Count;
+            stamp = s_barStampGlyphs[idx % s_barStampGlyphs.Length];
+            _barStampPalette[key] = stamp;
+        }
+        return stamp;
+    }
+
     public void StrokeRect(int x, int y, int w, int h, LvcColor color)
     {
         // Same negative-dim normalization as FillRect — stacked geometries can hand us
@@ -282,6 +380,9 @@ public sealed class ConsoleSurface
                     for (var px = 0; px < CellWidth; px++)
                         _pixels[py0 + py, px0 + px] = default;
             }
+            // Clear any bar-stamp on this cell so axis labels written over a bar render the
+            // label, not the stamp — text supersedes stamp the same way it supersedes pixels.
+            if (_barStamps is not null) _barStamps[cellRow, col] = '\0';
             col++;
         }
     }
@@ -290,8 +391,24 @@ public sealed class ConsoleSurface
     /// Encodes the surface into an ANSI string. Includes a leading cursor-home (\x1b[H) when
     /// <paramref name="home"/> is true so successive frames overwrite in place.
     /// </summary>
-    public string ToAnsi(bool home = true)
+    /// <param name="home">Prepend the cursor-home escape so a follow-up frame overwrites in place.</param>
+    /// <param name="color">
+    /// When false, emit a Claude / LLM-friendly plain-glyph rendering: just block / Braille
+    /// codepoints and text labels separated by newlines, with no SGR escapes, no cursor-home,
+    /// and no terminal-specific bytes. Sixel mode has no meaningful plain form and throws —
+    /// switch to <see cref="ConsoleRenderMode.HalfBlock"/> or <see cref="ConsoleRenderMode.Braille"/>.
+    /// </param>
+    public string ToAnsi(bool home = true, bool color = true)
     {
+        if (!color)
+        {
+            if (Mode == ConsoleRenderMode.Sixel)
+                throw new NotSupportedException(
+                    "Sixel encodes pixels into escape sequences and has no plain-text form. " +
+                    "Use ConsoleRenderMode.HalfBlock or Braille with color=false.");
+            return EncodePlainCells();
+        }
+
         return Mode switch
         {
             ConsoleRenderMode.Sixel => EncodeSixel(home),
@@ -348,6 +465,75 @@ public sealed class ConsoleSurface
         // right way to avoid the strip-below-image artifact; per-frame erasure isn't.
         _ = sb.Append("\x1b[0m");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Plain-text encoder: emits one glyph per cell with newlines between rows and nothing
+    /// else. Designed for consumers that read the output as text (LLM tool results, log
+    /// scrapers, golden files) where ANSI escapes would be noise. Two-color half-block
+    /// cells collapse to '█' since the color contrast that distinguished them is gone.
+    /// </summary>
+    private string EncodePlainCells()
+    {
+        var sb = new StringBuilder(CellRows * (CellCols + 1));
+
+        for (var r = 0; r < CellRows; r++)
+        {
+            for (var c = 0; c < CellCols; c++)
+                _ = sb.Append(GlyphForPlain(r, c));
+            if (r < CellRows - 1) _ = sb.Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
+    private char GlyphForPlain(int r, int c)
+    {
+        var g = _glyphs[r, c];
+        if (g.Glyph != '\0') return g.Glyph;
+
+        // Bar stamps: bar-series geometries (RoundedRectangleGeometry → FillRectStamped)
+        // record a per-color glyph in this grid for cells they fully cover. Pies, lines,
+        // areas, etc. don't, so their cells stay at '\0' and fall through to the original
+        // derived-glyph logic below. Stamps are only USED when there are 2+ distinct bar
+        // colors in this frame — a single-series bar chart falls through to Braille for
+        // its high-resolution single-bar look.
+        if (_barStamps is not null && _barStampPalette.Count > 1)
+        {
+            var stamp = _barStamps[r, c];
+            if (stamp != '\0') return stamp;
+        }
+
+        if (_pixels is not null)
+        {
+            // Braille — same bit packing as ResolveCell, just without picking up the color.
+            var bits = 0;
+            var baseY = r * CellHeight;
+            var baseX = c * CellWidth;
+            for (var dy = 0; dy < CellHeight; dy++)
+            {
+                for (var dx = 0; dx < CellWidth; dx++)
+                {
+                    if (_pixels[baseY + dy, baseX + dx].A == 0) continue;
+                    var bit = dx == 0
+                        ? (dy < 3 ? dy : 6)
+                        : (dy < 3 ? 3 + dy : 7);
+                    bits |= 1 << bit;
+                }
+            }
+            return bits == 0 ? ' ' : (char)(0x2800 | bits);
+        }
+
+        var hb = _hb![r, c];
+        var hasTop = hb.Top.A != 0;
+        var hasBot = hb.Bottom.A != 0;
+        if (!hasTop && !hasBot) return ' ';
+        if (hasTop && !hasBot) return '▀';
+        if (!hasTop && hasBot) return '▄';
+        // Two colors in one cell normally pick '▀' with bg=bottom-color so the colored
+        // encoder can paint both halves. Without color the contrast disappears, so collapse
+        // to the both-filled glyph instead — '▀' with no contrast looks half-empty.
+        return '█';
     }
 
     private void ResolveCell(int r, int c, out char glyph, out LvcColor fg, out LvcColor bg)
