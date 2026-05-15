@@ -29,6 +29,14 @@ if (args.Contains("--help") || args.Contains("-h"))
     return 0;
 }
 
+if (args.Contains("--install-skill"))
+{
+    // Drop the embedded render-chart SKILL.md into the user's home so Claude Code (and any
+    // other tool that reads ~/.claude/skills/) picks it up. One-time post-install step;
+    // users on tool update -g re-run it to refresh.
+    return InstallSkill();
+}
+
 System.Console.OutputEncoding = Encoding.UTF8;
 
 string? jsonInput = null;
@@ -279,9 +287,45 @@ static InMemoryConsoleChart Cartesian(ConsoleRenderMode mode, ChartSpec spec, Fu
             ?? (spec.Series.Length > 1 ? LiveChartsCore.Measure.LegendPosition.Bottom : LiveChartsCore.Measure.LegendPosition.Hidden),
     };
 
+static int InstallSkill()
+{
+    const string resourceName = "lvc.render-chart.SKILL.md";
+
+    var asm = System.Reflection.Assembly.GetExecutingAssembly();
+    using var stream = asm.GetManifestResourceStream(resourceName);
+    if (stream is null)
+    {
+        System.Console.Error.WriteLine($"error: embedded skill resource '{resourceName}' missing from this build.");
+        return 2;
+    }
+
+    // Honor $CLAUDE_HOME if set, otherwise default to ~/.claude. Lets a user with a custom
+    // Claude config root point at it without symlinking.
+    var claudeHome = Environment.GetEnvironmentVariable("CLAUDE_HOME")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
+    var targetDir = Path.Combine(claudeHome, "skills", "render-chart");
+    var targetPath = Path.Combine(targetDir, "SKILL.md");
+
+    try
+    {
+        Directory.CreateDirectory(targetDir);
+        using var fs = File.Create(targetPath);
+        stream.CopyTo(fs);
+    }
+    catch (Exception ex)
+    {
+        System.Console.Error.WriteLine($"error: failed to write skill to {targetPath} — {ex.Message}");
+        return 2;
+    }
+
+    System.Console.Out.WriteLine($"Installed render-chart skill -> {targetPath}");
+    return 0;
+}
+
 static void PrintUsage() => System.Console.Error.WriteLine("""
     usage: lvc [--mode auto|sixel|braille|halfblock] [--width N] [--height N]
                [--no-color] [--live] [--json '<spec>' | --file path]
+           lvc --install-skill
 
     JSON spec:
       {

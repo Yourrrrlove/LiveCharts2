@@ -39,4 +39,11 @@
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Embed the render-chart SKILL.md so the install-skill flag can drop it into
+         the user's ~/.claude/skills/ directory without needing the repo. LogicalName
+         is fixed so the runtime lookup doesn't depend on RootNamespace details. -->
+    <EmbeddedResource Include="..\..\..\.claude\skills\render-chart\SKILL.md" LogicalName="lvc.render-chart.SKILL.md" />
+  </ItemGroup>
+
 </Project>

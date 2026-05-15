@@ -17,6 +17,24 @@ dotnet tool install -g LiveChartsCore.Console.Cli
 
 Requires the .NET 8 runtime. After install, `lvc` is on your PATH.
 
+### Optional: install the Claude Code skill
+
+`lvc` ships with a Claude Code skill (`render-chart`) that teaches Claude when
+to use inline plain-mode rendering versus spawning an interactive window. Drop
+it into your home `~/.claude/skills/` with:
+
+```sh
+lvc --install-skill
+```
+
+This writes `~/.claude/skills/render-chart/SKILL.md`. Re-run after
+`dotnet tool update -g LiveChartsCore.Console.Cli` to pick up any skill
+revisions in the new version. Honors `$CLAUDE_HOME` if set.
+
+For GitHub Copilot users: there's no equivalent skill format; paraphrase
+the relevant decision tree from the SKILL.md into your project's
+`.github/copilot-instructions.md` by hand.
+
 ## Usage
 
 ```sh
