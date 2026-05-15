@@ -78,6 +78,27 @@ into escape sequences and has no plain form.
 series; `points` is used by scatter (`[x, y]`), candlestick
 (`[open, high, close, low]`), and box (`[max, q3, q1, median, min]`).
 
+### `--live` for interactive viewing
+
+Pass `--live` to run an interactive chart loop in a real terminal — mouse hover
+shows tooltips, click-and-drag pans, mouse wheel zooms, and `q` / `r` / `+` /
+`-` keys quit / reset / zoom. Auto-detects Sixel if the terminal supports it
+(falls back to Braille otherwise). Ctrl+C also exits.
+
+```sh
+lvc --json '{"kind":"line","series":[{"values":[1,2,3,4,3,2,1]}]}' --live
+```
+
+`--live` is incompatible with `--no-color` (the loop relies on ANSI escapes to
+redraw frames in place) and requires a TTY (won't run with stdout redirected).
+
+To pop a chart into a fresh terminal window from a script or agent, shell out
+through your platform's terminal-launcher:
+
+- Windows Terminal: `start wt.exe -- lvc --live --json '...'`
+- macOS Terminal:  `osascript -e 'tell app "Terminal" to do script "lvc --live --json ..."'`
+- GNOME Terminal:  `gnome-terminal -- lvc --live --json '...'`
+
 ### Pie sizing
 
 Pie charts render each series name as a label outside its wedge and hide the

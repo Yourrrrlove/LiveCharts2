@@ -36,6 +36,7 @@ ConsoleRenderMode? modeOverride = null;
 int? widthOverride = null;
 int? heightOverride = null;
 var noColor = false;
+var live = false;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -69,6 +70,13 @@ for (var i = 0; i < args.Length; i++)
         case "--no-color":
         case "--plain":
             noColor = true;
+            break;
+        // Run a live interactive chart loop instead of one-shot rendering. Drives the
+        // engine's animations, accepts mouse hover/pan/wheel + q/r/+/- keys, exits on
+        // Ctrl+C or q. Requires a real TTY (Sixel + cursor-home tricks); --no-color is
+        // rejected because the loop relies on ANSI escapes to redraw frames in place.
+        case "--live":
+            live = true;
             break;
         default:
             // Unknown flag — silently ignore so additions don't break older callers.
@@ -126,6 +134,21 @@ if (noColor && mode == ConsoleRenderMode.Sixel)
     return 2;
 }
 
+if (live && noColor)
+{
+    // Live loop redraws in place with cursor-home + frame-by-frame ANSI; without color
+    // there's nothing to keep the screen coherent. Either run one-shot --no-color, or
+    // drop --no-color and use --live in a real terminal.
+    System.Console.Error.WriteLine("error: --live is incompatible with --no-color; live mode needs ANSI escapes to redraw frames.");
+    return 2;
+}
+
+if (live && System.Console.IsOutputRedirected)
+{
+    System.Console.Error.WriteLine("error: --live requires a TTY; stdout is redirected. Drop --live for one-shot rendering.");
+    return 2;
+}
+
 // Cell-based size — fall back to terminal size, then 120x30 if the terminal isn't a TTY
 // (output redirected, etc.). Spec width/height are in cells.
 int cols, rows;
@@ -150,6 +173,28 @@ catch (Exception ex)
 
 if (!string.IsNullOrEmpty(spec.Title)) chart.TitleText = spec.Title;
 chart.ConfigureFromTerminalCells(cols, rows);
+
+if (live)
+{
+    // Cartesian charts get pan/zoom enabled in live mode — RenderLoopAsync wires the
+    // mouse-wheel + arrow keys into the engine's Pan/Zoom calls, but only if the view
+    // declares it supports both axes. Pie/Polar don't get this since their zoom semantics
+    // aren't meaningful.
+    if (chart is CartesianChart cartesian)
+        cartesian.ZoomMode = LiveChartsCore.Measure.ZoomAndPanMode.X | LiveChartsCore.Measure.ZoomAndPanMode.Y;
+
+    using var cts = new CancellationTokenSource();
+    System.Console.CancelKeyPress += (_, e) =>
+    {
+        if (cts.IsCancellationRequested) return;
+        e.Cancel = true;
+        cts.Cancel();
+    };
+
+    await chart.RenderLoopAsync(fps: 30, ct: cts.Token);
+    return 0;
+}
+
 System.Console.Out.Write(chart.Render(home: false, color: !noColor));
 return 0;
 
@@ -231,7 +276,7 @@ static InMemoryConsoleChart Cartesian(ConsoleRenderMode mode, ChartSpec spec, Fu
 
 static void PrintUsage() => System.Console.Error.WriteLine("""
     usage: lvc [--mode auto|sixel|braille|halfblock] [--width N] [--height N]
-               [--no-color] [--json '<spec>' | --file path]
+               [--no-color] [--live] [--json '<spec>' | --file path]
 
     JSON spec:
       {
