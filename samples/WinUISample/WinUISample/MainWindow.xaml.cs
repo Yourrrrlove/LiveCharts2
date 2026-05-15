@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -20,13 +19,13 @@ public sealed partial class MainWindow : Window
         grid.DataContext = this;
 
         // Dev-loop hook: LVC_SAMPLE selects an initial sample by path
-        // (e.g. LVC_SAMPLE=Bars/Basic). Lets agents/scripts launch the app
-        // pointed at a specific repro without UI navigation.
+        // (e.g. LVC_SAMPLE=Bars/Basic). The view is resolved by type name, so
+        // this works for any sample — including repro views that are
+        // intentionally not listed in the shared index.
         var initial = Environment.GetEnvironmentVariable("LVC_SAMPLE");
-        if (!string.IsNullOrWhiteSpace(initial) && Samples.Contains(initial))
-            content.Content = Activator
-                .CreateInstance(null, $"WinUISample.{initial.Replace('/', '.')}.View")?
-                .Unwrap();
+        if (!string.IsNullOrWhiteSpace(initial)
+            && Type.GetType($"WinUISample.{initial.Replace('/', '.')}.View") is { } viewType)
+            content.Content = Activator.CreateInstance(viewType);
 
         // Dev-loop hook: when LVC_SCREENSHOT is set, render the window to PNG
         // shortly after activation and exit. Lets agents/scripts capture the

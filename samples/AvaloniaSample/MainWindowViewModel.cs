@@ -13,8 +13,13 @@ public class MainWindowViewModel : INotifyPropertyChanged
         // (e.g. LVC_SAMPLE=Lines/Basic). Lets agents/scripts
         // launch the app pointed at a specific repro without UI navigation.
         var initial = Environment.GetEnvironmentVariable("LVC_SAMPLE");
-        if (!string.IsNullOrWhiteSpace(initial) && Array.IndexOf(Samples, initial) >= 0)
+        if (!string.IsNullOrWhiteSpace(initial)
+            && Type.GetType($"AvaloniaSample.{initial.Replace('/', '.')}.View") is not null)
+        {
+            if (Array.IndexOf(Samples, initial) < 0)
+                Samples = [.. Samples, initial];
             SelectedSample = initial;
+        }
     }
 
     public string[] Samples { get; set; }

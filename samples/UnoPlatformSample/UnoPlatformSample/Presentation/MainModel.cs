@@ -21,14 +21,22 @@ public partial record MainModel : INotifyPropertyChanged
         _navigator = navigator;
 
         // Dev-loop hook: LVC_SAMPLE selects an initial sample by path
-        // (e.g. LVC_SAMPLE=Bars/Basic). Lets agents/scripts launch the app
-        // pointed at a specific repro without UI navigation.
+        // (e.g. LVC_SAMPLE=Bars/Basic). The view is resolved by type name (see
+        // IndexToContentConverter), so this works for any sample — including
+        // repro views that are intentionally not listed in the shared index.
+        // The path is appended to Samples so the selector stays in sync with
+        // the displayed view.
         var initial = Environment.GetEnvironmentVariable("LVC_SAMPLE");
-        if (!string.IsNullOrWhiteSpace(initial) && Array.IndexOf(Samples, initial) >= 0)
+        if (!string.IsNullOrWhiteSpace(initial)
+            && Type.GetType($"WinUISample.{initial.Replace('/', '.')}.View") is not null)
+        {
+            if (Array.IndexOf(Samples, initial) < 0)
+                Samples = [.. Samples, initial];
             SelectedSample = initial;
+        }
     }
 
-    public string[] Samples { get; } = ViewModelsSamples.Index.Samples;
+    public string[] Samples { get; private set; } = ViewModelsSamples.Index.Samples;
     public string SelectedSample 
     {
         get => selectedSample; 
