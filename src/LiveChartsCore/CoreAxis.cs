@@ -52,6 +52,10 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     /// </summary>
     protected internal readonly Dictionary<Chart, Dictionary<string, AxisVisualSeprator>> activeSeparators = [];
 
+    // the renderer that drew this axis on the previous frame, per chart (null = the built-in draw). Used
+    // to sweep the previous drawer's visuals when the axis switches renderer (or renderer <-> built-in).
+    private readonly Dictionary<Chart, IAxisRenderer?> _lastRenderer = [];
+
     internal float _xo = 0f, _yo = 0f;
     internal LvcSize _size;
     internal AxisOrientation _orientation;
@@ -719,6 +723,16 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     /// <inheritdoc cref="ChartElement.Invalidate(Chart)"/>
     public override void Invalidate(Chart chart)
     {
+        // if the drawer changed since the last frame (built-in <-> renderer, or renderer <-> renderer),
+        // sweep the previous drawer's visuals first so they don't linger on the canvas beside the new ones.
+        _ = _lastRenderer.TryGetValue(chart, out var previousRenderer);
+        if (!ReferenceEquals(previousRenderer, Renderer))
+        {
+            if (previousRenderer is not null) previousRenderer.Clear(this, chart);
+            else Delete(chart); // the built-in draw was active: tear down its paint tasks and separators
+            _lastRenderer[chart] = Renderer;
+        }
+
         if (Renderer is not null) { Renderer.Draw(this, chart); return; }
 
         var cartesianChart = (CartesianChartEngine)chart;
@@ -1150,7 +1164,9 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     public override void RemoveFromUI(Chart chart)
     {
         base.RemoveFromUI(chart);
+        Renderer?.Clear(this, chart);
         _ = activeSeparators.Remove(chart);
+        _ = _lastRenderer.Remove(chart);
     }
 
     /// <summary>

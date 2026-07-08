@@ -45,4 +45,13 @@ public interface IAxisRenderer
     /// <param name="axis">The axis being drawn.</param>
     /// <param name="chart">The chart.</param>
     void Draw(ICartesianAxis axis, Chart chart);
+
+    /// <summary>
+    /// Removes everything this renderer added to the chart (its geometries and paint tasks). The axis
+    /// calls this when it stops using the renderer — because it was swapped for another renderer or for
+    /// the built-in draw (e.g. on a theme change) — so no stale visuals are left on the canvas.
+    /// </summary>
+    /// <param name="axis">The axis the renderer was drawing.</param>
+    /// <param name="chart">The chart.</param>
+    void Clear(ICartesianAxis axis, Chart chart);
 }
