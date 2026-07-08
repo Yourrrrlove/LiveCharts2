@@ -1091,7 +1091,6 @@ public class CartesianChartEngine(
         speed = 1 - speed;
         var m = direction == ZoomDirection.ZoomIn ? speed : 1 / speed;
         var scale = axis.GetScaler(DrawMarginLocation, DrawMarginSize);
-        var pivotPixels = scale.ToChartValues(pivot);
 
         var limits = axis.GetLimits();
 
@@ -1101,15 +1100,35 @@ public class CartesianChartEngine(
         double mint, maxt;
         var l = max - min;
 
-        if (scaleFactor is null)
+        if (scaleFactor is null && scale.IsLinear)
         {
-            var rMin = (pivotPixels - min) / l;
-            var rMax = 1 - rMin;
+            // Linear scaler (the default): value ratios equal pixel ratios, so the value-space computation
+            // keeps the pivot fixed AND preserves the shared-axis outer-rail aggregation, which works in
+            // value space via the aggregated limits (see GetLimits / #2159).
+            var pivotValue = scale.ToChartValues(pivot);
+            var rMin = (pivotValue - min) / l;
 
             var target = l * m;
+            mint = pivotValue - target * rMin;
+            maxt = pivotValue + target * (1 - rMin);
+        }
+        else if (scaleFactor is null)
+        {
+            // Non-linear scaler: a value ratio ((value - min) / (max - min)) no longer equals the pixel
+            // ratio, so scale the visible window around the pivot in PIXEL space and map the new edges back
+            // through the scaler. This keeps the pivot value exactly under the pointer.
+            var isX = axis.Orientation == AxisOrientation.X;
+            var startPx = isX ? DrawMarginLocation.X : DrawMarginLocation.Y;
+            var lengthPx = isX ? DrawMarginSize.Width : DrawMarginSize.Height;
 
-            mint = pivotPixels - target * rMin;
-            maxt = pivotPixels + target * rMax;
+            var loPx = pivot - (pivot - startPx) * m;
+            var hiPx = pivot + (startPx + lengthPx - pivot) * m;
+
+            var a = scale.ToChartValues(loPx);
+            var b = scale.ToChartValues(hiPx);
+
+            mint = Math.Min(a, b); // Y pixels grow downward, so ToChartValues can invert the order
+            maxt = Math.Max(a, b);
         }
         else
         {
