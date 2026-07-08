@@ -1170,7 +1170,15 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     public override void RemoveFromUI(Chart chart)
     {
         base.RemoveFromUI(chart);
-        Renderer?.Clear(this, chart);
+
+        // Clear the renderer that actually drew the last frame (recorded in _lastRenderer), which can differ
+        // from the current Renderer when Renderer was reassigned without an intervening Invalidate — its
+        // visuals would otherwise linger on the canvas after the axis is gone. Also clear the current Renderer
+        // if it's a different instance (defensive; a no-op when it never drew).
+        _ = _lastRenderer.TryGetValue(chart, out var lastRenderer);
+        lastRenderer?.Clear(this, chart);
+        if (!ReferenceEquals(Renderer, lastRenderer)) Renderer?.Clear(this, chart);
+
         _ = activeSeparators.Remove(chart);
         _ = _lastRenderer.Remove(chart);
     }
