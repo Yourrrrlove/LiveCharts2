@@ -129,6 +129,14 @@ public abstract class CoreRangeRowSeries<TModel, TVisual, TLabel, TErrorGeometry
         b.SecondaryBounds.AppendValue(b.TertiaryBounds);
         b.VisibleSecondaryBounds.AppendValue(b.VisibleTertiaryBounds);
 
+        // base.GetBounds derived the value-axis data padding from the High track alone
+        // (the tick of SecondaryBounds before the Low/tertiary merge above), so the auto-fit
+        // margin reflected only the High sub-range. Recompute it over the full [low, high]
+        // span so the padding uses the same tick the gridlines resolve for that range.
+        var ts = secondaryAxis.GetTick(chart.ControlSize, b.VisibleSecondaryBounds).Value * DataPadding.X;
+        b.SecondaryBounds.PaddingMax = ts;
+        b.SecondaryBounds.PaddingMin = ts;
+
         return sb;
     }
 

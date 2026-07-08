@@ -508,6 +508,14 @@ public abstract class CoreRangeLineSeries<TModel, TVisual, TLabel, TStrokePathGe
         var b = sb.Bounds;
         b.PrimaryBounds.AppendValue(b.TertiaryBounds);
         b.VisiblePrimaryBounds.AppendValue(b.VisibleTertiaryBounds);
+
+        // base.GetBounds derived the value-axis data padding from the High track alone
+        // (the tick of PrimaryBounds before the Low/tertiary merge above), so the auto-fit
+        // margin reflected only the High sub-range. Recompute it over the full [low, high]
+        // span so the padding uses the same tick the gridlines resolve for that range.
+        var tp = primaryAxis.GetTick(chart.ControlSize, b.VisiblePrimaryBounds).Value * DataPadding.Y;
+        b.PrimaryBounds.PaddingMax = tp;
+        b.PrimaryBounds.PaddingMin = tp;
         return sb;
     }
 
