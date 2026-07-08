@@ -52,6 +52,61 @@ public class AxisRendererTests
         Assert.IsTrue(renderer.DrawCalls > 0, "the custom renderer's Draw should replace the built-in draw");
     }
 
+    // Counts Delete calls — Delete removes the axis' paint tasks from the canvas, so it must only run when
+    // the built-in draw was genuinely active in a prior frame, never on an axis that started with a renderer.
+    private sealed class DeleteCountingAxis : Axis
+    {
+        public int DeleteCalls;
+        public override void Delete(Chart chart)
+        {
+            DeleteCalls++;
+            base.Delete(chart);
+        }
+    }
+
+    [TestMethod]
+    public void Renderer_set_from_the_start_does_not_tear_down_the_builtin_on_the_first_frame()
+    {
+        // The axis begins with a Renderer, so the built-in draw is never used — the first Invalidate must not
+        // sweep it (there is nothing to sweep, and Delete would strip paint tasks the renderer may share).
+        var axis = new DeleteCountingAxis { Renderer = new CountingRenderer() };
+        var chart = new SKCartesianChart
+        {
+            Width = 400,
+            Height = 300,
+            Series = [new LineSeries<double> { Values = [1, 2, 3] }],
+            XAxes = [axis],
+            YAxes = [new Axis()],
+        };
+
+        _ = chart.GetImage();
+
+        Assert.AreEqual(0, axis.DeleteCalls, "an axis that starts with a renderer must not Delete the built-in draw it never used");
+    }
+
+    [TestMethod]
+    public void Switching_from_the_builtin_to_a_renderer_tears_down_the_builtin()
+    {
+        // The axis starts on the built-in draw, then a renderer takes over: now the built-in visuals DO exist
+        // and must be swept exactly once so they don't linger beside the renderer's output.
+        var axis = new DeleteCountingAxis();
+        var chart = new SKCartesianChart
+        {
+            Width = 400,
+            Height = 300,
+            Series = [new LineSeries<double> { Values = [1, 2, 3] }],
+            XAxes = [axis],
+            YAxes = [new Axis()],
+        };
+
+        _ = chart.GetImage();
+        Assert.AreEqual(0, axis.DeleteCalls, "the built-in draw must not tear itself down while it is in use");
+
+        axis.Renderer = new CountingRenderer();
+        _ = chart.GetImage();
+        Assert.AreEqual(1, axis.DeleteCalls, "switching from the built-in draw to a renderer must sweep the built-in visuals once");
+    }
+
     [TestMethod]
     public void Swapping_the_renderer_clears_the_previous_one()
     {
