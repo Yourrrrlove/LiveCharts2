@@ -220,6 +220,57 @@ public class RangeSeriesAutoBoundsTests
             $"value-axis auto-max differs ({lowIsOuter.max} vs {highIsOuter.max}) for the same [0, 99] span.");
     }
 
+    [TestMethod]
+    public void RangeRowSeries_AutoPadding_UsesFullSpanTick()
+    {
+        // Horizontal variant: for RangeRow the value axis is X (secondary), and the same
+        // quirk lived there — base.GetBounds resolved the secondary padding tick from the
+        // High track before the Low endpoint was merged. Two rows with the SAME full [0, 99]
+        // value span but a different High sub-range must resolve the SAME value-axis padding.
+        //
+        // Unlike the vertical variants this asserts at the GetBounds level (the series'
+        // SecondaryBounds padding) rather than the fitted axis: a horizontal auto value axis
+        // re-resolves its own tick from the category (Y) axis, which happens to round both
+        // sub-ranges to the same nice number and would mask the difference the fix targets.
+        var lowIsOuter = RowValuePadding([new(0, 0), new(0, 99)]);   // Low=0 const, High in [0, 99]
+        var highIsOuter = RowValuePadding([new(0, 50), new(49, 99)]); // Low in [0, 49], High in [50, 99]
+
+        Assert.AreEqual(lowIsOuter, highIsOuter, 1e-9,
+            $"value-axis padding differs ({lowIsOuter} vs {highIsOuter}) for the same [0, 99] span; " +
+            "the padding tick must reflect the full span, not the High sub-range.");
+    }
+
+    // Measures a RangeRow series and returns the value-axis (X = secondary) data padding
+    // the series reports — the quantity the full-span-tick fix corrects.
+    private static double RowValuePadding(RangeValue[] values)
+    {
+        var series = new RangeRowSeries<RangeValue> { Values = values };
+        var chart = new SKCartesianChart
+        {
+            Width = 1000,
+            Height = 500,
+            Series = [series],
+            XAxes = [new Axis()],
+            YAxes = [new Axis()],
+        };
+        var core = (CartesianChartEngine)chart.CoreChart;
+        CoreMotionCanvas.DebugElapsedMilliseconds = 0;
+        core.IsLoaded = true;
+        core._isFirstDraw = true;
+        core.Measure();
+        try
+        {
+            // HorizontalBar swaps the axes: the value axis is the primary (X) argument, and
+            // its bounds land in SecondaryBounds — where the padding recompute applies.
+            var sb = series.GetBounds(core, core.YAxes[0], core.XAxes[0]);
+            return sb.Bounds.SecondaryBounds.PaddingMax;
+        }
+        finally
+        {
+            CoreMotionCanvas.DebugElapsedMilliseconds = -1;
+        }
+    }
+
     // Fits a vertical range series and returns the padded value-axis (Y) bounds.
     private static (double min, double max) FitValueBounds(ISeries series)
     {
