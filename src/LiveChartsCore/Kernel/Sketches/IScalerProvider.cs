@@ -37,8 +37,10 @@ public interface IScalerProvider
     /// Builds a scaler for <paramref name="axis"/>.
     /// </summary>
     /// <param name="axis">The axis to scale.</param>
+    /// <param name="chart">The chart the axis belongs to. An axis can be shared by several charts, so the
+    /// scaler is built per chart and a provider that keeps per-chart state must key it on this.</param>
     /// <param name="drawMarginLocation">The draw margin location.</param>
     /// <param name="drawMarginSize">The draw margin size.</param>
     /// <param name="bounds">Optional bounds to scale against; when null the axis' own limits are used.</param>
-    Scaler GetScaler(ICartesianAxis axis, LvcPoint drawMarginLocation, LvcSize drawMarginSize, Bounds? bounds);
+    Scaler GetScaler(ICartesianAxis axis, Chart chart, LvcPoint drawMarginLocation, LvcSize drawMarginSize, Bounds? bounds);
 }

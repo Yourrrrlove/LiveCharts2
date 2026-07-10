@@ -134,8 +134,8 @@ public class CartesianChartEngine(
         var xAxis = XAxes[xAxisIndex];
         var yAxis = YAxes[yAxisIndex];
 
-        var xScaler = xAxis.GetScaler(DrawMarginLocation, DrawMarginSize);
-        var yScaler = yAxis.GetScaler(DrawMarginLocation, DrawMarginSize);
+        var xScaler = xAxis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
+        var yScaler = yAxis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
 
         return [xScaler.ToChartValues(point.X), yScaler.ToChartValues(point.Y)];
     }
@@ -768,7 +768,7 @@ public class CartesianChartEngine(
             // apply padding
             if (axis.MinLimit is null)
             {
-                var s = axis.GetScaler(DrawMarginLocation, DrawMarginSize);
+                var s = axis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
                 // correction by geometry size
                 var p = Math.Abs(s.ToChartValues(axis.DataBounds.RequestedGeometrySize) - s.ToChartValues(0));
                 if (axis.DataBounds.PaddingMin > p) p = axis.DataBounds.PaddingMin;
@@ -791,7 +791,7 @@ public class CartesianChartEngine(
             // apply padding
             if (axis.MaxLimit is null)
             {
-                var s = axis.GetScaler(DrawMarginLocation, DrawMarginSize);
+                var s = axis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
                 // correction by geometry size
                 var p = Math.Abs(s.ToChartValues(axis.DataBounds.RequestedGeometrySize) - s.ToChartValues(0));
                 if (axis.DataBounds.PaddingMax > p) p = axis.DataBounds.PaddingMax;
@@ -874,8 +874,8 @@ public class CartesianChartEngine(
     /// <inheritdoc cref="ICartesianChartView.ScalePixelsToData(LvcPointD, int, int)"/>
     public LvcPointD ScalePixelsToData(LvcPointD point, int xAxisIndex = 0, int yAxisIndex = 0)
     {
-        var xScaler = XAxes[xAxisIndex].GetScaler(DrawMarginLocation, DrawMarginSize);
-        var yScaler = YAxes[yAxisIndex].GetScaler(DrawMarginLocation, DrawMarginSize);
+        var xScaler = XAxes[xAxisIndex].GetScaler(this, DrawMarginLocation, DrawMarginSize);
+        var yScaler = YAxes[yAxisIndex].GetScaler(this, DrawMarginLocation, DrawMarginSize);
 
         return new LvcPointD { X = xScaler.ToChartValues(point.X), Y = yScaler.ToChartValues(point.Y) };
     }
@@ -883,8 +883,8 @@ public class CartesianChartEngine(
     /// <inheritdoc cref="ICartesianChartView.ScaleDataToPixels(LvcPointD, int, int)"/>
     public LvcPointD ScaleDataToPixels(LvcPointD point, int xAxisIndex = 0, int yAxisIndex = 0)
     {
-        var xScaler = XAxes[xAxisIndex].GetScaler(DrawMarginLocation, DrawMarginSize);
-        var yScaler = YAxes[yAxisIndex].GetScaler(DrawMarginLocation, DrawMarginSize);
+        var xScaler = XAxes[xAxisIndex].GetScaler(this, DrawMarginLocation, DrawMarginSize);
+        var yScaler = YAxes[yAxisIndex].GetScaler(this, DrawMarginLocation, DrawMarginSize);
 
         return new LvcPointD { X = xScaler.ToPixels(point.X), Y = yScaler.ToPixels(point.Y) };
     }
@@ -1044,7 +1044,7 @@ public class CartesianChartEngine(
 
         void Fit(ICartesianAxis axis)
         {
-            var scale = axis.GetScaler(DrawMarginLocation, DrawMarginSize);
+            var scale = axis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
 
             var geometryOffset = GetGeometryOffset(axis, scale);
 
@@ -1090,7 +1090,7 @@ public class CartesianChartEngine(
         var speed = _zoomingSpeed < 0.1 ? 0.1 : (_zoomingSpeed > 0.95 ? 0.95 : _zoomingSpeed);
         speed = 1 - speed;
         var m = direction == ZoomDirection.ZoomIn ? speed : 1 / speed;
-        var scale = axis.GetScaler(DrawMarginLocation, DrawMarginSize);
+        var scale = axis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
 
         var limits = axis.GetLimits();
 
@@ -1190,7 +1190,7 @@ public class CartesianChartEngine(
     {
         if (_sectionZoomingStart is null) return;
 
-        var scaler = axis.GetScaler(DrawMarginLocation, DrawMarginSize);
+        var scaler = axis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
 
         var value = axis.Orientation == AxisOrientation.X
             ? _sectionZoomingStart.Value.X
@@ -1236,7 +1236,7 @@ public class CartesianChartEngine(
 
     private void PanAxis(ICartesianAxis axis, ZoomAndPanMode flags, float delta, bool thresholded)
     {
-        var scale = axis.GetScaler(DrawMarginLocation, DrawMarginSize);
+        var scale = axis.GetScaler(this, DrawMarginLocation, DrawMarginSize);
         var fits = !flags.HasFlag(ZoomAndPanMode.NoFit);
 
         var deltapixels = scale.ToChartValues(0) - scale.ToChartValues(delta);

@@ -132,8 +132,8 @@ public abstract class CoreScatterSeries<TModel, TVisual, TLabel, TErrorGeometry>
 
         var drawLocation = chart.DrawMarginLocation;
         var drawMarginSize = chart.DrawMarginSize;
-        var xScale = secondaryAxis.GetScaler(drawLocation, drawMarginSize);
-        var yScale = primaryAxis.GetScaler(drawLocation, drawMarginSize);
+        var xScale = secondaryAxis.GetScaler(chart, drawLocation, drawMarginSize);
+        var yScale = primaryAxis.GetScaler(chart, drawLocation, drawMarginSize);
 
         var weightStackIndex = StackGroup ?? ((ISeries)this).SeriesId;
         var weightBounds = chart.SeriesContext.GetWeightBounds(weightStackIndex);

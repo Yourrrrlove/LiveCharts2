@@ -207,8 +207,8 @@ public abstract class CoreSection<TSizedGeometry, TLabelGeometry> : CoreSection
         var primaryAxis = cartesianChart.GetYAxis(ScalesYAt);
         var secondaryAxis = cartesianChart.GetXAxis(ScalesXAt);
 
-        var secondaryScale = secondaryAxis.GetScaler(drawLocation, drawMarginSize);
-        var primaryScale = primaryAxis.GetScaler(drawLocation, drawMarginSize);
+        var secondaryScale = secondaryAxis.GetScaler(chart, drawLocation, drawMarginSize);
+        var primaryScale = primaryAxis.GetScaler(chart, drawLocation, drawMarginSize);
 
         var xi = Xi is null ? drawLocation.X : secondaryScale.ToPixels(Xi.Value);
         var xj = Xj is null ? drawLocation.X + drawMarginSize.Width : secondaryScale.ToPixels(Xj.Value);

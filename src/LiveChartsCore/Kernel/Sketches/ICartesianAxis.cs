@@ -256,11 +256,12 @@ public interface ICartesianAxis : IPlane, INotifyPropertyChanged
     /// derived axis to provide a custom (for example, non-linear) coordinate mapping; every scaler the
     /// engine builds for this axis — target, animated, zoom/pan and section scalers — flows through here.
     /// </summary>
+    /// <param name="chart">The chart the scaler is built for; an axis can be shared by several charts.</param>
     /// <param name="drawMarginLocation">The draw margin location.</param>
     /// <param name="drawMarginSize">The draw margin size.</param>
     /// <param name="bounds">Optional bounds to scale against; when null the axis' own limits are used.</param>
     /// <returns>The scaler.</returns>
-    Scaler GetScaler(LvcPoint drawMarginLocation, LvcSize drawMarginSize, Bounds? bounds = null);
+    Scaler GetScaler(Chart chart, LvcPoint drawMarginLocation, LvcSize drawMarginSize, Bounds? bounds = null);
 
     /// <summary>
     /// Gets or sets a renderer that fully owns this axis' measure and draw. When null (the default)

@@ -542,7 +542,7 @@ public static class Extensions
     /// <param name="chart"></param>
     /// <returns></returns>
     public static Scaler GetNextScaler(this ICartesianAxis axis, CartesianChartEngine chart) =>
-        axis.GetScaler(chart.DrawMarginLocation, chart.DrawMarginSize);
+        axis.GetScaler(chart, chart.DrawMarginLocation, chart.DrawMarginSize);
 
     /// <summary>
     /// Gets a scaler that is built based on the dimensions of the chart at a given time, the scaler is built based on the
@@ -560,6 +560,7 @@ public static class Extensions
         // if necessary, implement motion properties to track the DrawMarginLocation and DrawMarginSize.
 
         return axis.GetScaler(
+            chart,
             chart.DrawMarginLocation,
             chart.DrawMarginSize,
             new Bounds

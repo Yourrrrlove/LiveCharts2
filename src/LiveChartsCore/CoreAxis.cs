@@ -1139,12 +1139,12 @@ public abstract class CoreAxis<TTextGeometry, TLineGeometry>
     /// <inheritdoc cref="ICartesianAxis.ScalerProvider"/>
     public IScalerProvider? ScalerProvider { get; set => SetProperty(ref field, value); }
 
-    /// <inheritdoc cref="ICartesianAxis.GetScaler(LvcPoint, LvcSize, Bounds?)"/>
-    public virtual Scaler GetScaler(LvcPoint drawMarginLocation, LvcSize drawMarginSize, Bounds? bounds = null) =>
+    /// <inheritdoc cref="ICartesianAxis.GetScaler(Chart, LvcPoint, LvcSize, Bounds?)"/>
+    public virtual Scaler GetScaler(Chart chart, LvcPoint drawMarginLocation, LvcSize drawMarginSize, Bounds? bounds = null) =>
         // an explicit ScalerProvider wins; otherwise a Renderer that also knows how to scale
         // (implements IScalerProvider) supplies the coordinate strategy; otherwise the default linear scaler.
         (ScalerProvider ?? Renderer as IScalerProvider) is { } provider
-            ? provider.GetScaler(this, drawMarginLocation, drawMarginSize, bounds)
+            ? provider.GetScaler(this, chart, drawMarginLocation, drawMarginSize, bounds)
             : new(drawMarginLocation, drawMarginSize, this, bounds);
 
     /// <summary>
