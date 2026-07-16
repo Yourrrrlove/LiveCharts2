@@ -202,7 +202,17 @@ public class SkiaSharpDrawingContext(
             if (elementStroke is not null)
                 DrawByPaint(elementStroke, element, opacity);
 
-            if (elementPaint is not null)
+            // One paint can arrive under two names: a label reports its own Paint as its Fill, so
+            // that a paint set on a single point's label is seen when the series' DataLabelsPaint
+            // task draws it -- that path reads Fill and Stroke and never Paint (#1902, see
+            // BaseLabelGeometry). Here, where the element draws itself, the alias means both reads
+            // return the same instance, and painting each in turn drew the label twice: at twice
+            // the cost, visibly heavier, and compounding alpha on a translucent paint.
+            //
+            // Draw a paint once, whichever of the three it came in as.
+            if (elementPaint is not null &&
+                !ReferenceEquals(elementPaint, elementFill) &&
+                !ReferenceEquals(elementPaint, elementStroke))
                 DrawByPaint(elementPaint, element, opacity);
         }
         else

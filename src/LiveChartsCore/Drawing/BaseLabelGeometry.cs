@@ -205,8 +205,16 @@ public abstract partial class BaseLabelGeometry : Animatable, IDrawnElement
 
     Paint? IDrawnElement.Stroke { get; set; }
 
-    // quick hack...
-    // draw labels using the fill property when activepaint is not null.
+    // A label reports its own Paint as its Fill, on purpose: when a paint task draws the label,
+    // the draw path reads the element's Fill and Stroke and never its Paint, so this alias is the
+    // only way a paint set on the label itself is seen there. A series assigns
+    // label.Paint = DataLabelsPaint on every measure, so a paint set on a single point's label
+    // -- from PointMeasured, after that assignment -- would otherwise be ignored and the label
+    // would keep the series paint (#1902). Covered by Issue1902Tests.
+    //
+    // The cost of the alias is that one paint arrives under two names, and a label that carries
+    // its own paint would be drawn once as the fill and once as the paint; the draw path is what
+    // resolves that, see SkiaSharpDrawingContext.Draw.
     Paint? IDrawnElement.Fill
     {
         get => Paint;
