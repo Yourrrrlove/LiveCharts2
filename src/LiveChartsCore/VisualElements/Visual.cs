@@ -68,6 +68,7 @@ public abstract class Visual : ChartElement, IInternalInteractable
         if (DrawnElement is null)
             throw new Exception($"{nameof(DrawnElement)} can not be null.");
 
+        ApplyTheme(chart);
         Measure(chart);
 
         if (_drawnTask is null || _drawnTask.IsEmpty)
@@ -107,23 +108,26 @@ public abstract class Visual : ChartElement, IInternalInteractable
     /// <param name="chart"></param>
     protected abstract void Measure(Chart chart);
 
-    // The chart measures the title before it invalidates it (Chart.MeasureTitle), and by then
-    // the title must already be themed. Measure stays protected so that overriding it does not
-    // depend on whether the assembly has InternalsVisibleTo access to the core.
-    internal void InvokeMeasure(Chart chart) => Measure(chart);
-
     /// <summary>
-    /// Applies the theme to the visual, a style only sets the properties that the user has not set.
+    /// Applies the theme style to this visual, override it to be styled by the theme, normally
+    /// as <c>theme.ApplyStyleTo&lt;MyVisual&gt;(this)</c>. A style only sets the properties that
+    /// the user has not set, the arbitration is handled by the caller.
     /// </summary>
-    /// <typeparam name="T">The type of the visual.</typeparam>
     /// <param name="theme">The theme.</param>
-    protected virtual void ApplyTheme<T>(Theme theme)
-        where T : Visual
+    protected virtual void ApplyStyle(Theme theme) { }
+
+    // Called on every invalidation, and by the chart before it reads the title's size: the title
+    // is measured a full layout pass before it is invalidated, and a label with no paint can not
+    // be measured, so the theme has to have run by then. Applying the style is guarded by the
+    // theme id, so calling this more than once per theme costs nothing.
+    internal void ApplyTheme(Chart chart)
     {
+        var theme = chart.GetTheme();
+
         _isInternalSet = true;
         if (_theme != theme.ThemeId)
         {
-            theme.ApplyStyleTo<T>(this);
+            ApplyStyle(theme);
             _theme = theme.ThemeId;
         }
         _isInternalSet = false;

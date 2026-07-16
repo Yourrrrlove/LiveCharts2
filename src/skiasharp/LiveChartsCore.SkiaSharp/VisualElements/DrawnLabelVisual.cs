@@ -23,6 +23,7 @@
 using LiveChartsCore.Drawing;
 using LiveChartsCore.Painting;
 using LiveChartsCore.SkiaSharpView.Drawing.Geometries;
+using LiveChartsCore.Themes;
 using LiveChartsCore.VisualElements;
 
 namespace LiveChartsCore.SkiaSharpView.VisualElements;
@@ -84,17 +85,26 @@ public class DrawnLabelVisual : Visual
     public Paint? Paint
     {
         get => _paint;
-        set => SetPaintProperty(ref _paint, value, PaintStyle.Text);
+        set
+        {
+            SetPaintProperty(ref _paint, value, PaintStyle.Text);
+
+            // Forward right away instead of on measure: the geometry paint is what the label is
+            // drawn and measured with, and the chart measures the title before it invalidates it.
+            _drawnElement.Paint = _paint;
+        }
     }
 
     /// <inheritdoc cref="Visual.DrawnElement"/>
     protected internal override IDrawnElement? DrawnElement => _drawnElement;
 
+    /// <inheritdoc cref="Visual.ApplyStyle(Theme)"/>
+    protected override void ApplyStyle(Theme theme) =>
+        theme.ApplyStyleTo<DrawnLabelVisual>(this);
+
     /// <inheritdoc cref="Visual.Measure(Chart)"/>
     protected override void Measure(Chart chart)
     {
-        ApplyTheme<DrawnLabelVisual>(chart.GetTheme());
 
-        _drawnElement.Paint = _paint;
     }
 }
