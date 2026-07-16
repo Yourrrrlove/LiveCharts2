@@ -680,30 +680,34 @@ geoMap.DataPointerDown += (sender, points) =>
 
 ## Custom overlays at lat/lon (markers, callouts, etc.)
 
-The map's `VisualElements` collection accepts any `VisualElement` — the
-same primitives the cartesian charts use (`GeometryVisual`,
-`DrawnLabelVisual`, `LineVisual`, ...). Wrap one in a
-`GeoVisualElement(visual) { Longitude, Latitude }` to anchor it at a
-geographic coordinate; the wrapper re-projects on every measure so the
-overlay follows zoom, pan, and orthographic rotation.
+The map's `VisualElements` collection accepts any `Visual` — the same
+class the cartesian charts use for custom elements, described in the
+[visual elements article]({{ website_url }}/docs/{{ platform }}/{{ version }}/samples.general.visualElements).
+Wrap one in a `GeoVisualElement(visual) { Longitude, Latitude }` to anchor
+it at a geographic coordinate; the wrapper re-projects on every measure so
+the overlay follows zoom, pan, and orthographic rotation.
+
+The marker below is an ordinary `Visual` whose `DrawnElement` is a circle.
+Note that `Measure` is empty: `GeoVisualElement` writes the projected pixel
+onto the drawn element itself, so a visual that positions itself would
+overwrite the very coordinate it is anchored to.
+
+```csharp
+{{~ render "~/../samples/ViewModelsSamples/Maps/MarkersOnMap/CityMarkerVisual.cs" ~}}
+```
+
+Anchor one instance per coordinate and hand them to the map:
 
 {{~ if xaml ~}}
 <pre><code>// In your ViewModel:
 public IChartElement[] CityMarkers { get; } = [
-    Marker(longitude: -74.00, latitude:  40.71), // New York
-    Marker(longitude: 139.69, latitude:  35.69), // Tokyo
-    Marker(longitude:  -3.70, latitude:  40.42), // Madrid
+    CityMarker(longitude: -74.00, latitude:  40.71), // New York
+    CityMarker(longitude: 139.69, latitude:  35.69), // Tokyo
+    CityMarker(longitude:  -3.70, latitude:  40.42), // Madrid
 ];
 
-static GeoVisualElement Marker(double longitude, double latitude) =>
-    new(new GeometryVisual&lt;CircleGeometry&gt;
-    {
-        Width = 14, Height = 14,
-        Fill = new SolidColorPaint(new SKColor(255, 87, 51)),
-        Stroke = new SolidColorPaint(SKColors.White) { StrokeThickness = 2 },
-        // Inner X/Y is the bbox top-left; center the dot on the point.
-        Translate = new LvcPoint(-7, -7),
-    })
+static GeoVisualElement CityMarker(double longitude, double latitude) =>
+    new(new CityMarkerVisual())
     {
         Longitude = longitude,
         Latitude = latitude,
@@ -721,19 +725,13 @@ static GeoVisualElement Marker(double longitude, double latitude) =>
 
 @code {
     private IChartElement[] markers = [
-        Marker(-74.00,  40.71),
-        Marker(139.69,  35.69),
-        Marker( -3.70,  40.42),
+        CityMarker(-74.00,  40.71),
+        CityMarker(139.69,  35.69),
+        CityMarker( -3.70,  40.42),
     ];
 
-    static GeoVisualElement Marker(double lon, double lat) =>
-        new(new GeometryVisual&lt;CircleGeometry&gt;
-        {
-            Width = 14, Height = 14,
-            Fill = new SolidColorPaint(new SKColor(255, 87, 51)),
-            Stroke = new SolidColorPaint(SKColors.White) { StrokeThickness = 2 },
-            Translate = new LvcPoint(-7, -7),
-        })
+    static GeoVisualElement CityMarker(double lon, double lat) =>
+        new(new CityMarkerVisual())
         {
             Longitude = lon,
             Latitude = lat,
@@ -744,19 +742,13 @@ static GeoVisualElement Marker(double longitude, double latitude) =>
 {{~ if winforms ~}}
 <pre><code>geoMap1.VisualElements = new IChartElement[]
 {
-    Marker(longitude: -74.00, latitude:  40.71),
-    Marker(longitude: 139.69, latitude:  35.69),
-    Marker(longitude:  -3.70, latitude:  40.42),
+    CityMarker(longitude: -74.00, latitude:  40.71),
+    CityMarker(longitude: 139.69, latitude:  35.69),
+    CityMarker(longitude:  -3.70, latitude:  40.42),
 };
 
-static GeoVisualElement Marker(double longitude, double latitude) =>
-    new(new GeometryVisual&lt;CircleGeometry&gt;
-    {
-        Width = 14, Height = 14,
-        Fill = new SolidColorPaint(new SKColor(255, 87, 51)),
-        Stroke = new SolidColorPaint(SKColors.White) { StrokeThickness = 2 },
-        Translate = new LvcPoint(-7, -7),
-    })
+static GeoVisualElement CityMarker(double longitude, double latitude) =>
+    new(new CityMarkerVisual())
     {
         Longitude = longitude,
         Latitude = latitude,
