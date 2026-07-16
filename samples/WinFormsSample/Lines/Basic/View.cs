@@ -39,7 +39,6 @@ public partial class View : UserControl
             new LabelGeometry
             {
                 Text = "My chart title",
-                Paint = new SolidColorPaint(SKColor.Parse("#303030")),
                 TextSize = 25,
                 Padding = new LiveChartsCore.Drawing.Padding(15)
             });

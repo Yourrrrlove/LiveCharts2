@@ -17,7 +17,6 @@
         <lvc:PolarChart.Title>
             <lvc:XamlDrawnLabelVisual
                 Text="My chart title"
-                Paint="#303030"
                 TextSize="25"
                 Padding="15"/>
         </lvc:PolarChart.Title>

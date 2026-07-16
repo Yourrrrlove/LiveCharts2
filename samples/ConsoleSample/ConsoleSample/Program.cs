@@ -20,7 +20,6 @@ var cartesianChart = new SKCartesianChart
             Text = "Hello LiveCharts",
             TextSize = 30,
             Padding = new Padding(15),
-            Paint = new SolidColorPaint(0xff303030)
         }),
     LegendPosition = LiveChartsCore.Measure.LegendPosition.Right,
     Background = SKColors.White

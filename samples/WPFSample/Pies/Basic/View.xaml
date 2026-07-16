@@ -19,7 +19,6 @@
         <lvc:PieChart.Title>
             <lvc:XamlDrawnLabelVisual
                 Text="My chart title"
-                Paint="#000"
                 TextSize="25"
                 Padding="15"/>
         </lvc:PieChart.Title>

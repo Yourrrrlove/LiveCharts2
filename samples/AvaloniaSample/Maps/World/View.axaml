@@ -19,7 +19,6 @@
         <lvc:GeoMap.Title>
             <lvc:XamlDrawnLabelVisual
                 Text="World population by country"
-                Paint="{lvc:SolidColorPaint Color='#303030'}"
                 TextSize="20"
                 Padding="{lvc:Padding '12'}"/>
         </lvc:GeoMap.Title>

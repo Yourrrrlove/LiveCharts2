@@ -16,7 +16,6 @@
         <lvc:CartesianChart.Title>
             <lvc:XamlDrawnLabelVisual
                 Text="My chart title"
-                Paint="{lvc:SolidColorPaint Color='#303030'}"
                 TextSize="{lvc:Float Value='25'}"
                 Padding="{lvc:Padding Value='15'}"/>
         </lvc:CartesianChart.Title>

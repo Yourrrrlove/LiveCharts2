@@ -21,7 +21,6 @@ public class View : Panel
                 new LabelGeometry
                 {
                     Text = "My chart title",
-                    Paint = new SolidColorPaint(SKColors.Black),
                     TextSize = 25,
                     Padding = new LiveChartsCore.Drawing.Padding(15)
                 })
