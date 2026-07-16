@@ -248,7 +248,8 @@ a look at the [Paints article]({{ website_url }}/docs/{{ platform }}/{{ version 
 
 ## Title property
 
-A `Title` is a `VisualElement` rendered above the map. The same
+A `Title` is a `Visual` rendered above the map — the older
+`VisualElement` is still accepted, any other type throws. The same
 `DrawnLabelVisual` used by cartesian and pie charts works here — set
 `Text`, `TextSize` and `Padding`. The map shrinks vertically to make
 room for the title.
