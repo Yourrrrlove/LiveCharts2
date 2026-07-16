@@ -335,6 +335,8 @@ public abstract class Chart
         // Casting to VisualElement threw for anything built on Visual, which is every visual in
         // the General/VisualElements samples. InvokePointerDown already hit tests through
         // IInteractable, the interface both families implement for exactly this reason.
+        // CS0618: VisualElement is obsolete and still supported, that is the point of this branch.
+#pragma warning disable CS0618
         return VisualElements.SelectMany<IChartElement, IChartElement>(visual => visual switch
         {
             // A VisualElement can host children, so it runs its own, possibly nested, hit test.
@@ -345,6 +347,7 @@ public abstract class Chart
 
             _ => []
         });
+#pragma warning restore CS0618
     }
 
     /// <summary>
@@ -909,8 +912,11 @@ public abstract class Chart
         }
 
         // VisualElement is an older type for the title, this is kept for compatibility.
+        // CS0618: it is obsolete and still supported, that is what this branch is for.
+#pragma warning disable CS0618
         if (View.Title?.ChartElementSource is VisualElement ve)
             return ve.Measure(this);
+#pragma warning restore CS0618
 
         throw new Exception("The title must be a Visual or a VisualElement.");
     }
@@ -937,6 +943,8 @@ public abstract class Chart
         }
 
         // VisualElement is an older type for the title, this is kept for compatibility.
+        // CS0618: it is obsolete and still supported, that is what this branch is for.
+#pragma warning disable CS0618
         if (View.Title?.ChartElementSource is VisualElement ve)
         {
             var titleSize = ve.Measure(this);
@@ -946,6 +954,7 @@ public abstract class Chart
             AddVisual(((IChartElement)ve).ChartElementSource);
             return;
         }
+#pragma warning restore CS0618
 
         throw new Exception("The title must be a Visual or a VisualElement.");
     }

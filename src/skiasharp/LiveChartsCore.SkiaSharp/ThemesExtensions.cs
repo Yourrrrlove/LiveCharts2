@@ -349,11 +349,15 @@ public static class ThemesExtensions
                             sankey.DataLabelsPaint =
                                 new SolidColorPaint(theme.IsDark ? new(245, 245, 245) : new(45, 45, 45));
                     })
+                    // CS0618: BaseLabelVisual is obsolete and still themed, a LabelVisual that is
+                    // already out there has to keep following the theme.
+#pragma warning disable CS0618
                     .HasRuleFor<BaseLabelVisual>(label =>
                     {
                         label.Paint =
                             new SolidColorPaint(theme.IsDark ? new(200, 200, 200) : new(30, 30, 30));
                     })
+#pragma warning restore CS0618
                     .HasRuleFor<DrawnLabelVisual>(label =>
                     {
                         label.Paint =

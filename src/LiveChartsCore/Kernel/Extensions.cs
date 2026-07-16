@@ -374,6 +374,7 @@ public static class Extensions
     /// <param name="visual">The visual.</param>
     /// <param name="animation">The animation.</param>
     /// <param name="properties">The properties.</param>
+    [Obsolete($"Replaced by {nameof(Visual)}, which animates itself, see its Easing and AnimationSpeed.")]
     public static void Animate(this VisualElement visual, Animation animation, params PropertyDefinition[]? properties)
     {
         foreach (var animatable in visual.GetDrawnGeometries())

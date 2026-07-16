@@ -35,6 +35,7 @@ namespace LiveChartsCore.VisualElements;
 /// <summary>
 /// Defines the base visual element class, inheriting from this class makes it easy to implement a visual element.
 /// </summary>
+[Obsolete($"Replaced by {nameof(Visual)}.")]
 public abstract class VisualElement : ChartElement, INotifyPropertyChanged, IInternalInteractable
 {
     internal double _x;

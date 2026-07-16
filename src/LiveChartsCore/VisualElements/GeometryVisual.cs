@@ -34,6 +34,7 @@ namespace LiveChartsCore.VisualElements;
 /// </summary>
 /// <typeparam name="TGeometry">The type of the geometry.</typeparam>
 /// <typeparam name="TLabelGeometry">The type of the label.</typeparam>
+[Obsolete($"Replaced by {nameof(Visual)}.")]
 public class GeometryVisual<TGeometry, TLabelGeometry> : BaseGeometryVisual
     where TGeometry : BoundedDrawnGeometry, new()
     where TLabelGeometry : BaseLabelGeometry, new()

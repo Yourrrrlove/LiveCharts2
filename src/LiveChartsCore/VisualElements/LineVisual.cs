@@ -33,6 +33,7 @@ namespace LiveChartsCore.VisualElements;
 /// Defines a visual element in a chart that draws a sized geometry in the user interface.
 /// </summary>
 /// <typeparam name="TGeometry">The type of the geometry.</typeparam>
+[Obsolete($"Replaced by {nameof(Visual)}.")]
 public class LineVisual<TGeometry> : BaseGeometryVisual
     where TGeometry : BaseLineGeometry, new()
 {

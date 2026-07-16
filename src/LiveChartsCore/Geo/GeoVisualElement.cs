@@ -58,6 +58,7 @@ public class GeoVisualElement : ChartElement
     /// inner visual element.
     /// </summary>
     /// <param name="visual">The visual element to position at (Longitude, Latitude).</param>
+    [Obsolete($"Replaced by the {nameof(Visual)} overload.")]
     public GeoVisualElement(VisualElement visual)
         : this((ChartElement?)visual)
     { }
@@ -109,6 +110,8 @@ public class GeoVisualElement : ChartElement
 
     private void SetLocation(float x, float y)
     {
+        // CS0618: VisualElement is obsolete and still supported, that is what this branch is for.
+#pragma warning disable CS0618
         switch (Visual)
         {
             case VisualElement visualElement:
@@ -123,6 +126,7 @@ public class GeoVisualElement : ChartElement
                 visual.DrawnElement.Y = y;
                 break;
         }
+#pragma warning restore CS0618
     }
 
     /// <inheritdoc cref="ChartElement.RemoveFromUI(Chart)"/>

@@ -32,6 +32,7 @@ namespace LiveChartsCore.VisualElements;
 /// <summary>
 /// Defines a label visual element.
 /// </summary>
+[Obsolete($"Replaced by {nameof(Visual)}.")]
 public abstract class BaseLabelVisual : VisualElement
 {
     internal Paint? _paint;
@@ -94,6 +95,7 @@ public abstract class BaseLabelVisual : VisualElement
 /// Defines a label visual element.
 /// </summary>
 /// <typeparam name="TLabelGeometry">The type of the label.</typeparam>
+[Obsolete($"Replaced by {nameof(Visual)}.")]
 public abstract class BaseLabelVisual<TLabelGeometry> : BaseLabelVisual
     where TLabelGeometry : BaseLabelGeometry, new()
 {
