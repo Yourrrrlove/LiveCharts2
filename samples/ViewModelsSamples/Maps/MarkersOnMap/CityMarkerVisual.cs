@@ -1,4 +1,5 @@
 using LiveChartsCore;
+using LiveChartsCore.Drawing;
 using LiveChartsCore.SkiaSharpView.Drawing.Geometries;
 using LiveChartsCore.SkiaSharpView.Painting;
 using LiveChartsCore.VisualElements;
@@ -15,7 +16,10 @@ public class CityMarkerVisual : Visual
     //
     // The translate centers the circle on the projected point; without it the geometry's
     // top-left corner would sit on the coordinate.
-    protected override CircleGeometry DrawnElement { get; } = new()
+    //
+    // Declared as IDrawnElement rather than CircleGeometry: net462 does not support covariant
+    // returns, and Measure has no need for the derived type here.
+    protected override IDrawnElement DrawnElement { get; } = new CircleGeometry
     {
         Width = Size,
         Height = Size,
