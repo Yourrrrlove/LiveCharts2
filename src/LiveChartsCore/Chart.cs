@@ -327,9 +327,25 @@ public abstract class Chart
     }
 
     /// <inheritdoc cref="IChartView.GetVisualsAt(LvcPointD)"/>
-    public IEnumerable<IChartElement> GetVisualsAt(LvcPointD point) =>
-        VisualElements.SelectMany(visual =>
-            ((VisualElement)visual).IsHitBy(this, new(point)));
+    public IEnumerable<IChartElement> GetVisualsAt(LvcPointD point)
+    {
+        var location = new LvcPoint(point);
+
+        // VisualElements is a collection of IChartElement, so it holds both visual families.
+        // Casting to VisualElement threw for anything built on Visual, which is every visual in
+        // the General/VisualElements samples. InvokePointerDown already hit tests through
+        // IInteractable, the interface both families implement for exactly this reason.
+        return VisualElements.SelectMany<IChartElement, IChartElement>(visual => visual switch
+        {
+            // A VisualElement can host children, so it runs its own, possibly nested, hit test.
+            VisualElement visualElement => visualElement.IsHitBy(this, location),
+
+            // A Visual draws a single element, its hit box is the whole of it.
+            Visual v => v.GetHitBox().Contains(location) ? [v] : [],
+
+            _ => []
+        });
+    }
 
     /// <summary>
     /// Loads the control resources.

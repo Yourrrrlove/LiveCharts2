@@ -119,9 +119,10 @@ public partial class SourceGenChart : IChartView
     }
 
     /// <inheritdoc cref="IChartView.GetVisualsAt(LvcPointD)"/>
+    // Delegate to the core instead of repeating the hit test, which is how this copy came to
+    // still cast every element to VisualElement after the core learned to handle both families.
     public IEnumerable<IChartElement> GetVisualsAt(LvcPointD point) =>
-        CoreChart.VisualElements.SelectMany(visual =>
-            ((VisualElement)visual).IsHitBy(CoreChart, new(point)));
+        CoreChart.GetVisualsAt(point);
 
     private void OnCoreMeasuring(IChartView chart) =>
         Measuring?.Invoke(this);
