@@ -25,6 +25,7 @@ using LiveChartsCore.Drawing;
 using LiveChartsCore.Kernel;
 using LiveChartsCore.Kernel.Events;
 using LiveChartsCore.Painting;
+using LiveChartsCore.Themes;
 
 namespace LiveChartsCore.VisualElements;
 
@@ -105,4 +106,26 @@ public abstract class Visual : ChartElement, IInternalInteractable
     /// </summary>
     /// <param name="chart"></param>
     protected abstract void Measure(Chart chart);
+
+    // The chart measures the title before it invalidates it (Chart.MeasureTitle), and by then
+    // the title must already be themed. Measure stays protected so that overriding it does not
+    // depend on whether the assembly has InternalsVisibleTo access to the core.
+    internal void InvokeMeasure(Chart chart) => Measure(chart);
+
+    /// <summary>
+    /// Applies the theme to the visual, a style only sets the properties that the user has not set.
+    /// </summary>
+    /// <typeparam name="T">The type of the visual.</typeparam>
+    /// <param name="theme">The theme.</param>
+    protected virtual void ApplyTheme<T>(Theme theme)
+        where T : Visual
+    {
+        _isInternalSet = true;
+        if (_theme != theme.ThemeId)
+        {
+            theme.ApplyStyleTo<T>(this);
+            _theme = theme.ThemeId;
+        }
+        _isInternalSet = false;
+    }
 }
